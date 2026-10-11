@@ -29,6 +29,17 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--limit", type=int, default=None, help="Only scan the first N symbols (debug)")
 
 
+def _report_delivery(result) -> None:
+    """Print the delivery summary and any per-recipient errors to stderr."""
+    print(f"Delivery: provider={result.get('provider')} sent={result.get('sent','?')} "
+          f"failed={result.get('failed','?')} delivered={result.get('delivered')}",
+          file=sys.stderr)
+    for r in result.get("results", []):
+        if not r.get("ok"):
+            print(f"  FAILED -> {r.get('chat_id') or r.get('to')}: "
+                  f"{r.get('error')} {r.get('code', '')}", file=sys.stderr)
+
+
 def cmd_signals(args) -> int:
     cfg = load_config()
     symbols = load_universe(args.universe)
@@ -61,8 +72,7 @@ def cmd_signals(args) -> int:
 
     notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
     result = notifier.send(message)
-    print(f"Delivery: provider={result.get('provider')} sent={result.get('sent','?')} "
-          f"failed={result.get('failed','?')} delivered={result.get('delivered')}", file=sys.stderr)
+    _report_delivery(result)
 
     if args.json:
         print(json.dumps({
@@ -119,8 +129,7 @@ def cmd_recap(args) -> int:
 
     notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
     result = notifier.send(message)
-    print(f"Delivery: provider={result.get('provider')} sent={result.get('sent','?')} "
-          f"failed={result.get('failed','?')} delivered={result.get('delivered')}", file=sys.stderr)
+    _report_delivery(result)
     if args.json:
         print(json.dumps({"week": wk.summary(), "month": mo.summary(),
                           "delivery": result}, indent=2))
@@ -165,13 +174,7 @@ def cmd_momentum(args) -> int:
 
     notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
     result = notifier.send(message)
-    # Always report delivery so scheduled runs are auditable.
-    print(f"Delivery: provider={result.get('provider')} "
-          f"sent={result.get('sent', '?')} failed={result.get('failed', '?')} "
-          f"delivered={result.get('delivered')}", file=sys.stderr)
-    for r in result.get("results", []):
-        if not r.get("ok"):
-            print(f"  FAILED -> {r.get('chat_id') or r.get('to')}: {r.get('error')}", file=sys.stderr)
+    _report_delivery(result)
     if args.json:
         print(json.dumps({"picks": picks, "delivery": result}, indent=2))
     return 0 if result.get("delivered", True) else 1
