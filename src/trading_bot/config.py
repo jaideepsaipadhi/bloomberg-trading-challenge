@@ -179,26 +179,32 @@ class StrategyConfig:
 
 
 @dataclass
-class WhatsAppConfig:
-    """WhatsApp delivery settings.
+class DeliveryConfig:
+    """Message delivery settings.
 
-    provider:
-      - "console": print to stdout (default, zero setup, safe for testing)
-      - "twilio":  broadcast 1:1 to each recipient via Twilio's WhatsApp API
+    provider (NOTIFY_PROVIDER, or legacy WHATSAPP_PROVIDER):
+      - "console":  print to stdout (default, zero setup, safe for testing)
+      - "telegram": post to one or more Telegram chats/GROUPS via a bot
+                    (free, supports group threads — the recommended path)
+      - "twilio":   broadcast 1:1 to each WhatsApp recipient via Twilio
 
-    NOTE: The official WhatsApp Business API (Twilio/Meta) cannot post into a
-    WhatsApp *group*. "recipients" is therefore a broadcast list of individual
-    numbers that have opted in. See README for the group caveat.
+    NOTE: The official WhatsApp API (Twilio/Meta) cannot post into a WhatsApp
+    *group* and needs a paid account for custom text. Telegram does both for
+    free — see docs/WHATSAPP_SETUP.md.
     """
 
-    provider: str = field(default_factory=lambda: os.getenv("WHATSAPP_PROVIDER", "console"))
+    provider: str = field(default_factory=lambda:
+                          os.getenv("NOTIFY_PROVIDER") or os.getenv("WHATSAPP_PROVIDER", "console"))
 
-    # Twilio
+    # Telegram (provider="telegram")
+    telegram_token: Optional[str] = field(default_factory=lambda: os.getenv("TELEGRAM_BOT_TOKEN"))
+    # comma-separated chat ids, e.g. "-1001234567890" (a group) or "123456789"
+    telegram_chat_ids_raw: Optional[str] = field(default_factory=lambda: os.getenv("TELEGRAM_CHAT_IDS"))
+
+    # Twilio WhatsApp (provider="twilio")
     twilio_account_sid: Optional[str] = field(default_factory=lambda: os.getenv("TWILIO_ACCOUNT_SID"))
     twilio_auth_token: Optional[str] = field(default_factory=lambda: os.getenv("TWILIO_AUTH_TOKEN"))
-    # e.g. "whatsapp:+14155238886" (Twilio sandbox number)
     twilio_from: Optional[str] = field(default_factory=lambda: os.getenv("TWILIO_WHATSAPP_FROM"))
-    # comma-separated e.g. "whatsapp:+1555...,whatsapp:+1444..."
     recipients_raw: Optional[str] = field(default_factory=lambda: os.getenv("WHATSAPP_RECIPIENTS"))
 
     @property
@@ -207,12 +213,22 @@ class WhatsAppConfig:
             return []
         return [r.strip() for r in self.recipients_raw.split(",") if r.strip()]
 
+    @property
+    def telegram_chat_ids(self) -> list[str]:
+        if not self.telegram_chat_ids_raw:
+            return []
+        return [c.strip() for c in self.telegram_chat_ids_raw.split(",") if c.strip()]
+
+
+# Backwards-compatible alias.
+WhatsAppConfig = DeliveryConfig
+
 
 @dataclass
 class Config:
     portfolio: PortfolioConfig = field(default_factory=PortfolioConfig)
     strategy: StrategyConfig = field(default_factory=StrategyConfig)
-    whatsapp: WhatsAppConfig = field(default_factory=WhatsAppConfig)
+    whatsapp: DeliveryConfig = field(default_factory=DeliveryConfig)
 
     def to_dict(self) -> dict:
         return asdict(self)

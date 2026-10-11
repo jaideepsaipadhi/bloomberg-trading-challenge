@@ -66,3 +66,54 @@ def test_twilio_surfaces_errors(monkeypatch):
 def test_recipients_parsing():
     cfg = WhatsAppConfig(recipients_raw="whatsapp:+1555 , whatsapp:+1444 ,")
     assert cfg.recipients == ["whatsapp:+1555", "whatsapp:+1444"]
+
+
+# ---- Telegram ----
+
+def test_telegram_requires_token_and_chats():
+    with pytest.raises(ValueError):
+        wa.TelegramNotifier(token="", chat_ids=[])
+
+
+def test_build_notifier_selects_telegram():
+    cfg = WhatsAppConfig(provider="telegram")
+    cfg.telegram_token = "123:abc"
+    cfg.telegram_chat_ids_raw = "-100123"
+    assert isinstance(wa.build_notifier(cfg), wa.TelegramNotifier)
+
+
+def test_telegram_posts_to_each_chat(monkeypatch):
+    calls = []
+
+    def fake_post(url, data=None, timeout=None):
+        calls.append({"url": url, "data": data})
+        return _Resp(200, {"ok": True})
+
+    monkeypatch.setattr(wa.requests, "post", fake_post)
+    n = wa.TelegramNotifier("123:abc", ["-1001", "222"])
+    res = n.send("*book* update")
+    assert res["delivered"] is True and res["sent"] == 2
+    assert calls[0]["data"]["chat_id"] == "-1001"
+    assert calls[0]["data"]["text"] == "*book* update"
+    assert "sendMessage" in calls[0]["url"]
+
+
+def test_telegram_retries_plain_on_parse_error(monkeypatch):
+    attempts = []
+
+    def fake_post(url, data=None, timeout=None):
+        attempts.append(data.get("parse_mode"))
+        if data.get("parse_mode") == "Markdown":
+            return _Resp(400, {"description": "Bad Request: can't parse entities"})
+        return _Resp(200, {"ok": True})
+
+    monkeypatch.setattr(wa.requests, "post", fake_post)
+    n = wa.TelegramNotifier("123:abc", ["-1001"])
+    res = n.send("weird _ * markup")
+    assert res["delivered"] is True
+    assert attempts == ["Markdown", None]   # retried without parse_mode
+
+
+def test_telegram_chat_ids_parsing():
+    cfg = WhatsAppConfig(telegram_chat_ids_raw="-1001234567890, 987654321 ,")
+    assert cfg.telegram_chat_ids == ["-1001234567890", "987654321"]

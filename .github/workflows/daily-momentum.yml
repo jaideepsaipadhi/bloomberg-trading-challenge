@@ -2,7 +2,8 @@ name: Momentum book
 
 # Posts the cross-sectional momentum book to WhatsApp on a schedule.
 # Add repo Secrets (Settings -> Secrets and variables -> Actions):
-#   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, WHATSAPP_RECIPIENTS
+#   Telegram (recommended): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
+#   or Twilio WhatsApp: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, WHATSAPP_RECIPIENTS
 # Without them the run falls back to console mode (sends nothing) — safe to merge.
 
 on:
@@ -30,7 +31,9 @@ jobs:
 
       - name: Post momentum book
         env:
-          WHATSAPP_PROVIDER: ${{ secrets.TWILIO_ACCOUNT_SID != '' && 'twilio' || 'console' }}
+          NOTIFY_PROVIDER: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && 'telegram' || (secrets.TWILIO_ACCOUNT_SID != '' && 'twilio' || 'console') }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}

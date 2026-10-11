@@ -30,7 +30,7 @@ class ConsoleNotifier:
     """Prints the message. Zero setup; the safe default."""
 
     def send(self, message: str) -> dict:
-        print("\n===== WhatsApp (console / dry-run) =====")
+        print("\n===== Message (console / dry-run) =====")
         print(message)
         print("========================================\n")
         return {"provider": "console", "delivered": True}
@@ -79,13 +79,67 @@ class TwilioNotifier:
                 "delivered": sent == len(results) and len(results) > 0}
 
 
-def build_notifier(wa_cfg) -> Notifier:
-    provider = (wa_cfg.provider or "console").lower()
+class TelegramNotifier:
+    """Posts a message to one or more Telegram chats — including GROUPS.
+
+    Add the bot to your group and use the group's chat id (a negative number).
+    Free, no templates, no approval. The recommended delivery path.
+    """
+
+    def __init__(self, token: str, chat_ids: list[str]):
+        if not token or not chat_ids:
+            raise ValueError(
+                "Telegram notifier needs TELEGRAM_BOT_TOKEN and a non-empty "
+                "TELEGRAM_CHAT_IDS list."
+            )
+        self.base = f"https://api.telegram.org/bot{token}"
+        self.chat_ids = chat_ids
+
+    def send(self, message: str) -> dict:
+        results = []
+        for cid in self.chat_ids:
+            row = {"chat_id": cid, "ok": False, "status": None, "error": None}
+            # Try Markdown (for *bold*/_italic_); if Telegram can't parse the
+            # entities, retry as plain text so a stray char never blocks a send.
+            for parse_mode in ("Markdown", None):
+                try:
+                    data = {"chat_id": cid, "text": message,
+                            "disable_web_page_preview": True}
+                    if parse_mode:
+                        data["parse_mode"] = parse_mode
+                    resp = requests.post(self.base + "/sendMessage", data=data, timeout=30)
+                    row["status"] = resp.status_code
+                    if resp.ok:
+                        row["ok"] = True
+                        break
+                    err = ""
+                    try:
+                        err = resp.json().get("description", "")
+                    except Exception:
+                        err = (resp.text or "")[:200]
+                    row["error"] = err
+                    if parse_mode and "parse" in err.lower():
+                        continue  # retry without Markdown
+                    break
+                except Exception as exc:  # pragma: no cover - network path
+                    row["error"] = str(exc)
+                    break
+            results.append(row)
+        sent = sum(1 for r in results if r["ok"])
+        return {"provider": "telegram", "results": results,
+                "sent": sent, "failed": len(results) - sent,
+                "delivered": sent == len(results) and len(results) > 0}
+
+
+def build_notifier(cfg) -> Notifier:
+    provider = (cfg.provider or "console").lower()
+    if provider == "telegram":
+        return TelegramNotifier(token=cfg.telegram_token, chat_ids=cfg.telegram_chat_ids)
     if provider == "twilio":
         return TwilioNotifier(
-            account_sid=wa_cfg.twilio_account_sid,
-            auth_token=wa_cfg.twilio_auth_token,
-            from_=wa_cfg.twilio_from,
-            recipients=wa_cfg.recipients,
+            account_sid=cfg.twilio_account_sid,
+            auth_token=cfg.twilio_auth_token,
+            from_=cfg.twilio_from,
+            recipients=cfg.recipients,
         )
     return ConsoleNotifier()

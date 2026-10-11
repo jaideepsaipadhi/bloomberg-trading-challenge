@@ -1,4 +1,40 @@
-# Going live: WhatsApp delivery
+# Going live: message delivery
+
+## Recommended: Telegram (free, supports GROUPS, 10-minute setup)
+
+WhatsApp's official APIs can't post to a group and need a *paid* account for
+custom text. **Telegram does both for free** — a bot posts straight into your
+team's group. This is the recommended path.
+
+1. **Create a bot:** in Telegram, message **@BotFather** → `/newbot` → follow
+   the prompts. It gives you a **token** like `123456789:AAE...`.
+2. **Add the bot to your group:** open your team's Telegram group → Add members
+   → search your bot's username → add it. (Create a group if you don't have one.)
+3. **Send any message in the group** (e.g. "hi") so the bot can see the chat.
+4. **Find the group's chat id:**
+   ```bash
+   export TELEGRAM_BOT_TOKEN=123456789:AAE...
+   trading-bot telegram-id
+   ```
+   It prints the group's **chat id** (a negative number like `-1001234567890`).
+5. **Configure `.env`:**
+   ```ini
+   NOTIFY_PROVIDER=telegram
+   TELEGRAM_BOT_TOKEN=123456789:AAE...
+   TELEGRAM_CHAT_IDS=-1001234567890      # one or more, comma-separated
+   ```
+6. **Test, then go live:**
+   ```bash
+   trading-bot momentum --dry-run     # prints, sends nothing
+   trading-bot momentum               # posts into the group
+   ```
+
+For the scheduled runner, put `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_IDS` in
+GitHub repo Secrets and set `NOTIFY_PROVIDER=telegram`.
+
+---
+
+## Alternative: WhatsApp via Twilio (1:1 broadcast only, needs paid account)
 
 This wires the bot to post the daily **trend setups** (`signals`) and/or the
 weekly **momentum book** (`momentum`) to your team over WhatsApp.

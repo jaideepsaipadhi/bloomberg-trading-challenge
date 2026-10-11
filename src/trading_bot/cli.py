@@ -108,6 +108,35 @@ def cmd_momentum(args) -> int:
     return 0
 
 
+def cmd_telegram_id(args) -> int:
+    """List chat ids the bot can see (run after adding the bot to your group
+    and sending a message there). Needs TELEGRAM_BOT_TOKEN in the environment."""
+    import requests
+    cfg = load_config()
+    token = cfg.whatsapp.telegram_token
+    if not token:
+        print("Set TELEGRAM_BOT_TOKEN first (from @BotFather).", file=sys.stderr)
+        return 2
+    r = requests.get(f"https://api.telegram.org/bot{token}/getUpdates", timeout=30)
+    if not r.ok:
+        print(f"getUpdates failed: {r.status_code} {r.text[:200]}", file=sys.stderr)
+        return 1
+    seen = {}
+    for upd in r.json().get("result", []):
+        msg = upd.get("message") or upd.get("channel_post") or {}
+        chat = msg.get("chat") or {}
+        if chat.get("id") is not None:
+            seen[chat["id"]] = f"{chat.get('type')} — {chat.get('title') or chat.get('username') or chat.get('first_name','')}"
+    if not seen:
+        print("No chats yet. Add the bot to your group, SEND A MESSAGE in the "
+              "group, then re-run this. (Telegram only shows chats with recent activity.)")
+        return 0
+    print("Chats the bot can see (use the id in TELEGRAM_CHAT_IDS):")
+    for cid, desc in seen.items():
+        print(f"  {cid}   [{desc}]")
+    return 0
+
+
 def cmd_backtest(args) -> int:
     cfg = load_config()
     symbols = load_universe(args.universe)
@@ -159,9 +188,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     m = sub.add_parser("momentum", help="Post today's cross-sectional momentum book")
     _add_common(m)
-    m.add_argument("--dry-run", action="store_true", help="Force console output (no WhatsApp send)")
+    m.add_argument("--dry-run", action="store_true", help="Force console output (no send)")
     m.add_argument("--json", action="store_true", help="Also print machine-readable JSON")
     m.set_defaults(func=cmd_momentum)
+
+    t = sub.add_parser("telegram-id", help="Discover Telegram chat/group ids for the bot")
+    t.set_defaults(func=cmd_telegram_id)
 
     return parser
 
