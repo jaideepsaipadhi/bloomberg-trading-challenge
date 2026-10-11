@@ -1,0 +1,27 @@
+# WLS — tradeable universe for the Bloomberg Trading Challenge.
+# One ticker per line. Lines starting with '#' are ignored.
+#
+# >>> REPLACE THIS SEED LIST with the EXACT symbols your competition allows. <<<
+# These are just liquid large-caps as a working placeholder so you can run the
+# bot immediately. Yahoo Finance ticker conventions apply (e.g. BRK-B not BRK.B).
+symbol
+AAPL
+MSFT
+NVDA
+AMZN
+GOOGL
+META
+TSLA
+AVGO
+JPM
+V
+UNH
+XOM
+JNJ
+WMT
+PG
+MA
+HD
+COST
+ADBE
+NFLX

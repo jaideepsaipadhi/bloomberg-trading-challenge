@@ -1,0 +1,186 @@
+# Bloomberg Trading Challenge — Momentum + EMA Signal Bot
+
+A **signals-only** assistant for the (simulated) Bloomberg Global Trading
+Challenge. It scans the competition's allowed universe for short-term
+(1–2 day hold) long setups that combine an **EMA trend stack** with
+**momentum confirmation**, sizes them for a **$1M paper portfolio**
+($100k per trade), and posts the ranked setups to WhatsApp.
+
+Humans review the setups and enter the trades in the Bloomberg terminal.
+**The bot does not place trades.**
+
+---
+
+## ⚠️ Read this first: about "99% win rate"
+
+You asked for "solid, 99% win rate picks." That number is not achievable by
+any EMA/momentum strategy — or any strategy — on 1–2 day holds. This project
+is built to be **honest** about that, because a bot that *claims* near-certain
+wins to a group of people is how people lose money.
+
+What a good short-term momentum system actually looks like:
+
+| Metric | Realistic target | Fantasy |
+|---|---|---|
+| Win rate | **~45–60%** | 99% |
+| How it profits | winners **bigger** than losers (positive expectancy) | "always right" |
+| Risk control | hard stop on every trade | "it'll come back" |
+
+The honest backtester in this repo reports the **true** win rate and
+expectancy. On a 2-year sample of large-cap stocks it shows ~51% win rate and
+roughly break-even expectancy at the strict 1–2 day horizon — which is exactly
+the point: **the edge is small and must be validated, never assumed.**
+
+A key finding from the built-in sensitivity probe: as you raise the profit
+target, the win rate *falls* (e.g. a 2.5:1 reward/risk target won only ~47% of
+the time). That inverse relationship is the mathematical reason 99% is
+impossible — you can only get a very high hit rate with a microscopic target,
+which destroys expectancy and hides catastrophic tail risk.
+
+**Use this as a disciplined screener and a backtesting lab, not a crystal ball.**
+
+---
+
+## The strategy
+
+A candidate **long** setup fires on a daily bar when ALL of these hold:
+
+1. **EMA trend stack** — `EMA(8) > EMA(21) > EMA(50)` and price above `EMA(21)`
+   (trade with the short-term uptrend).
+2. **Momentum** — positive rate-of-change over 10 bars, and RSI(14) in a
+   constructive **50–75** band (strong, but not an overbought blow-off).
+3. **Participation** — volume at/above its 20-day average.
+4. **Not overextended** — price no more than 3×ATR above the fast EMA
+   (don't chase parabolic moves).
+
+Risk management, defined **before** entry:
+
+- **Stop:** `entry − 1.5 × ATR(14)`.
+- **Target:** `entry + 1.5 × (risk)` (a 1.5:1 reward/risk by default).
+- **Time stop:** exit after `MAX_HOLD_DAYS` (default 2) if neither hit.
+- **Sizing:** fixed **$100k notional** per trade → `shares = floor(100000 / entry)`.
+  With $1M that's a **max of 10 concurrent positions**; when more than 10
+  setups qualify, the strongest-scoring ones are kept.
+
+All thresholds live in `src/trading_bot/config.py` and are overridable via env
+vars / `.env` — see `.env.example`.
+
+---
+
+## Setup
+
+```bash
+pip install -e ".[dev]"      # or: pip install -r requirements.txt
+cp .env.example .env         # optional; defaults work for a console dry-run
+```
+
+### 1. Load your universe (this is "WLS")
+
+Edit `config/universe.csv` and replace the placeholder large-caps with the
+**exact tickers the competition allows you to trade**, one per line. Use Yahoo
+Finance ticker conventions (e.g. `BRK-B`, not `BRK.B`).
+
+### 2. Run a backtest (do this before trusting any signal)
+
+```bash
+trading-bot backtest --period 2y
+# or without installing:
+PYTHONPATH=src python -m trading_bot.cli backtest --period 2y
+```
+
+Look at **expectancy_r** (average R per trade) and **profit_factor**. You want
+expectancy > 0 and profit factor > 1 *on your real universe*, ideally on data
+the parameters weren't tuned on. A `win_rate` near 1.0 would be a red flag, not
+a success — it means the setup has no real stop.
+
+### 3. Generate today's setups
+
+```bash
+trading-bot signals --dry-run            # prints to console, no WhatsApp
+trading-bot signals                      # sends via configured WhatsApp provider
+trading-bot signals --json               # also emit machine-readable JSON
+```
+
+---
+
+## WhatsApp delivery
+
+Set the provider in `.env`:
+
+- `WHATSAPP_PROVIDER=console` *(default)* — prints the message. No credentials.
+- `WHATSAPP_PROVIDER=twilio` — broadcasts each signal 1:1 to every number in
+  `WHATSAPP_RECIPIENTS` via Twilio's WhatsApp API.
+
+### ⚠️ The group limitation (important)
+
+The **official** WhatsApp Business API (Twilio *and* Meta Cloud API) **cannot
+post into a WhatsApp group.** It only supports 1:1 conversations with people
+who opted in. So "post to the group" is implemented as a **broadcast**: each
+team member gets the signal in their own 1:1 chat with the bot.
+
+If you truly need it inside one group thread, the only way is an **unofficial
+WhatsApp-Web automation library** (e.g. `whatsapp-web.js`, `Baileys`). Those
+drive a real logged-in WhatsApp session and *can* post to a group — but they
+violate WhatsApp's ToS and **risk your number getting banned.** This repo
+deliberately does not implement that path; the adapter interface
+(`src/trading_bot/whatsapp.py`) makes it easy to add if you accept that risk.
+
+### Twilio quick start
+
+1. Create a Twilio account and enable the WhatsApp sandbox (or get an approved
+   sender).
+2. Have each teammate message the sandbox join code so they're opted in.
+3. Fill `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, and
+   `WHATSAPP_RECIPIENTS` in `.env`, set `WHATSAPP_PROVIDER=twilio`, and run
+   `trading-bot signals`.
+
+---
+
+## Scheduling (post before each session)
+
+Run the scan on a cron (e.g. once each morning before the trading session):
+
+```cron
+30 13 * * 1-5  cd /path/to/repo && /usr/bin/env trading-bot signals >> bot.log 2>&1
+```
+
+---
+
+## Project layout
+
+```
+config/universe.csv          # WLS — your tradeable tickers (edit this)
+src/trading_bot/
+  config.py                  # all tunables (env-overridable)
+  universe.py                # loads the ticker list
+  data.py                    # Yahoo Finance OHLCV (swap here for Bloomberg export)
+  indicators.py              # EMA, ROC, RSI, ATR (pure, tested)
+  strategy.py                # setup screen, scoring, sizing -> Signal objects
+  backtest.py                # honest replay: win rate, expectancy, drawdown
+  formatting.py              # WhatsApp message rendering
+  whatsapp.py                # console / Twilio adapters
+  cli.py                     # `trading-bot signals|backtest`
+tests/                       # pytest suite (no network needed)
+```
+
+## Tests
+
+```bash
+pytest -q
+```
+
+---
+
+## Honest limitations & next steps
+
+- **Backtest realism:** uses daily bars; when a bar could have hit both stop
+  and target it pessimistically assumes the stop. It does not model slippage,
+  commissions, or intraday paths. Treat results as indicative, not exact.
+- **No portfolio-level concurrency in the backtest:** it measures per-setup
+  expectancy. The 10-slot cap is applied to *live* signals only.
+- **Validate out-of-sample:** tune on one period, confirm on another. Do not
+  trust in-sample numbers.
+- **This is for a simulated competition.** Do not point it at a real brokerage
+  without understanding the regulatory implications of sharing trade signals.
+
+Not financial advice.

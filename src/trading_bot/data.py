@@ -1,0 +1,59 @@
+"""Market-data access.
+
+Uses Yahoo Finance (free) via ``yfinance`` for daily OHLCV. Results are
+normalised to lower-case columns [open, high, low, close, volume] with a
+DatetimeIndex, which is what the indicators/strategy expect.
+
+The rest of the codebase only depends on that shape — so if you later switch
+to a Bloomberg export or another provider, you only change this module.
+"""
+from __future__ import annotations
+
+from typing import Optional
+
+import pandas as pd
+
+
+def _normalise(df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    if df is None or len(df) == 0:
+        return None
+    df = df.copy()
+    # yfinance sometimes returns a MultiIndex for a single ticker; flatten it.
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df.columns = [str(c).lower() for c in df.columns]
+    needed = ["open", "high", "low", "close", "volume"]
+    if not all(c in df.columns for c in needed):
+        return None
+    df = df[needed].dropna()
+    return df if len(df) else None
+
+
+def fetch_one(symbol: str, period: str = "1y", interval: str = "1d") -> Optional[pd.DataFrame]:
+    """Fetch a single symbol's OHLCV. Returns None on failure/empty."""
+    import yfinance as yf  # imported lazily so tests don't need the network
+
+    try:
+        raw = yf.download(
+            symbol,
+            period=period,
+            interval=interval,
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+        )
+    except Exception:
+        return None
+    return _normalise(raw)
+
+
+def fetch_universe(
+    symbols: list[str], period: str = "1y", interval: str = "1d"
+) -> dict[str, pd.DataFrame]:
+    """Fetch OHLCV for many symbols. Silently skips ones that fail."""
+    out: dict[str, pd.DataFrame] = {}
+    for sym in symbols:
+        df = fetch_one(sym, period=period, interval=interval)
+        if df is not None:
+            out[sym] = df
+    return out
