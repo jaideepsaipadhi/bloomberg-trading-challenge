@@ -28,6 +28,42 @@ def close_panel(symbol_data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return pd.DataFrame({s: df["close"] for s, df in symbol_data.items()}).sort_index()
 
 
+def book_weights(names, vol_row, mode="invvol", cap=0.20) -> dict:
+    """Portfolio weights for the held names. 'invvol' = inverse trailing
+    volatility (down-weight jumpy winners), capped at `cap`, renormalised;
+    'equal' = equal-weight. Always sums to ~1 (fully invested)."""
+    if not names:
+        return {}
+    if mode != "invvol":
+        return {nm: 1.0 / len(names) for nm in names}
+    iv = {}
+    for nm in names:
+        v = vol_row.get(nm, np.nan)
+        iv[nm] = 1.0 / (v + 1e-9) if (v is not None and np.isfinite(v) and v > 0) else 0.0
+    if sum(iv.values()) <= 0:
+        return {nm: 1.0 / len(names) for nm in names}
+    # Water-fill so no weight exceeds `cap`: cap the over-weight names and
+    # redistribute the freed budget across the rest until stable.
+    weights, remaining, capped_total = {}, set(names), 0.0
+    while remaining:
+        tot = sum(iv[nm] for nm in remaining)
+        budget = 1.0 - capped_total
+        if tot <= 0:
+            for nm in remaining:
+                weights[nm] = budget / len(remaining)
+            break
+        over = [nm for nm in remaining if budget * iv[nm] / tot > cap]
+        if not over:
+            for nm in remaining:
+                weights[nm] = budget * iv[nm] / tot
+            break
+        for nm in over:
+            weights[nm] = cap
+            capped_total += cap
+            remaining.discard(nm)
+    return weights
+
+
 def momentum_score(closes: pd.DataFrame, lookback: int, skip: int,
                    vol_window: int = 0) -> pd.DataFrame:
     """Trailing return over `lookback` days, skipping the last `skip` days.
@@ -76,19 +112,23 @@ def momentum_backtest(closes: pd.DataFrame, bench_close, cfg,
     end = n if end is None else min(end, n)
     rets = closes.pct_change()
     score = momentum_score(closes, cfg.mom_lookback, cfg.mom_skip, getattr(cfg, "mom_vol_window", 0))
+    mode = getattr(cfg, "mom_weight", "equal")
+    wvol = rets.rolling(getattr(cfg, "mom_weight_vol_window", 63)).std()
 
     idx = cal[start:end]
     port_daily = pd.Series(0.0, index=idx)
-    held: list[str] = []
+    weights: dict = {}
     for k, d in enumerate(idx):
         if k == 0:
             continue
         if (k - 1) % cfg.mom_rebalance_days == 0:
             s = score.loc[idx[k - 1]].replace([np.inf, -np.inf], np.nan).dropna()
-            held = list(s.sort_values(ascending=False).head(top_k).index) if len(s) else []
-        if held:
-            dr = rets.loc[d, held].mean()
-            port_daily.loc[d] = 0.0 if not np.isfinite(dr) else float(dr)
+            names = list(s.sort_values(ascending=False).head(top_k).index) if len(s) else []
+            weights = book_weights(names, wvol.loc[idx[k - 1]], mode)
+        if weights:
+            dr = sum(w * rets.loc[d, nm] for nm, w in weights.items()
+                     if np.isfinite(rets.loc[d, nm]))
+            port_daily.loc[d] = float(dr)
 
     equity = (1 + port_daily).cumprod()
     total = float(equity.iloc[-1] - 1) if len(equity) else 0.0
@@ -125,10 +165,11 @@ def momentum_walk_forward(closes, bench_close, cfg, top_k=None,
 
 
 def momentum_picks(symbol_data, cfg, top_k=None):
-    """Today's ranked top-K cross-sectional momentum names.
+    """Today's ranked top-K cross-sectional momentum book.
 
-    Returns a list of dicts {symbol, momentum, price} strongest first — the
-    live book this alpha would hold right now.
+    Returns a list of dicts {symbol, momentum, price, weight} strongest first,
+    where weight is the inverse-vol (or equal) portfolio weight — the live book
+    this alpha would hold right now.
     """
     top_k = top_k or cfg.mom_top_k
     closes = close_panel(symbol_data)
@@ -136,6 +177,9 @@ def momentum_picks(symbol_data, cfg, top_k=None):
     latest = score.iloc[-1].replace([np.inf, -np.inf], np.nan).dropna()
     ranked = latest.sort_values(ascending=False).head(top_k)
     prices = closes.iloc[-1]
+    wvol = closes.pct_change().rolling(getattr(cfg, "mom_weight_vol_window", 63)).std().iloc[-1]
+    weights = book_weights(list(ranked.index), wvol, getattr(cfg, "mom_weight", "equal"))
     return [{"symbol": s, "momentum": round(float(ranked[s]), 4),
-             "price": round(float(prices.get(s, float("nan"))), 2)}
+             "price": round(float(prices.get(s, float("nan"))), 2),
+             "weight": round(float(weights.get(s, 0.0)), 4)}
             for s in ranked.index]

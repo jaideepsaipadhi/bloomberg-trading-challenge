@@ -164,6 +164,12 @@ class StrategyConfig:
     # Doesn't raise the edge but shrinks worst-case windows (smoother ride).
     # Default 0 (raw momentum, highest raw edge).
     mom_vol_window: int = field(default_factory=lambda: _env_int("MOM_VOL_WINDOW", 0))
+    # Position weighting within the momentum book: "invvol" (inverse trailing
+    # volatility, capped at 20%) or "equal". Inverse-vol was the only overlay
+    # that improved train AND held test with lower drawdown, so it's the
+    # default; set MOM_WEIGHT=equal for the simpler scheme.
+    mom_weight: str = field(default_factory=lambda: os.getenv("MOM_WEIGHT", "invvol"))
+    mom_weight_vol_window: int = field(default_factory=lambda: _env_int("MOM_WEIGHT_VOL_WINDOW", 63))
 
     @property
     def min_bars_required(self) -> int:

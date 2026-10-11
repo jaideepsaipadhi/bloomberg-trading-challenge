@@ -32,6 +32,7 @@ def test_momentum_score_shape_and_values():
 def test_momentum_backtest_beats_weak_equal_mix():
     cfg = StrategyConfig()
     cfg.mom_lookback, cfg.mom_skip, cfg.mom_rebalance_days = 252, 21, 21
+    cfg.mom_weight = "equal"  # isolate SELECTION; weighting tested separately
     closes = close_panel(_panel(n=500))
     # benchmark = equal-weight all names (buy & hold)
     bench = (closes / closes.iloc[0]).mean(axis=1)
@@ -68,3 +69,20 @@ def test_risk_adjusted_momentum_differs_from_raw():
     last_raw = raw.iloc[-1].dropna()
     last_radj = radj.iloc[-1].dropna()
     assert not np.allclose(last_raw.values, last_radj.values)
+
+
+def test_book_weights_invvol_caps_and_sums_to_one():
+    from trading_bot.alpha import book_weights
+    names = ["A", "B", "C", "D"]
+    vol = pd.Series({"A": 0.01, "B": 0.02, "C": 0.04, "D": 0.08})
+    w = book_weights(names, vol, mode="invvol", cap=0.40)
+    assert abs(sum(w.values()) - 1.0) < 1e-9
+    assert all(v <= 0.40 + 1e-9 for v in w.values())
+    # lower-vol name gets more weight than higher-vol name
+    assert w["A"] > w["D"]
+
+
+def test_book_weights_equal():
+    from trading_bot.alpha import book_weights
+    w = book_weights(["A", "B", "C", "D"], pd.Series(dtype=float), mode="equal")
+    assert all(abs(v - 0.25) < 1e-9 for v in w.values())

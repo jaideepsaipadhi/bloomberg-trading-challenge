@@ -86,16 +86,17 @@ def cmd_momentum(args) -> int:
 
     picks = momentum_picks(symbol_data, cfg.strategy)
     equity = cfg.portfolio.total_capital
-    per = equity / len(picks) if picks else 0.0
+    wscheme = "inverse-vol" if cfg.strategy.mom_weight == "invvol" else "equal"
 
     stamp = datetime.now().strftime("%Y-%m-%d")
     lines = [f"🏆 *Momentum book* — {stamp}",
-             f"Hold the {len(picks)} strongest names (12-1 momentum), equal-weight, "
-             f"rebalance ~monthly. ${per:,.0f}/name."]
+             f"Hold the {len(picks)} strongest names (12-1 momentum), {wscheme}-weighted, "
+             f"rebalance ~monthly."]
     for i, p in enumerate(picks, 1):
-        sh = int(per // p["price"]) if p["price"] > 0 else 0
-        lines.append(f"{i}. *{p['symbol']}*  mom {p['momentum']*100:+.0f}%  "
-                     f"~{sh:,} sh @ {p['price']:,.2f}")
+        dollars = p.get("weight", 1.0 / max(1, len(picks))) * equity
+        sh = int(dollars // p["price"]) if p["price"] > 0 else 0
+        lines.append(f"{i}. *{p['symbol']}*  {p.get('weight', 0)*100:.0f}%  "
+                     f"mom {p['momentum']*100:+.0f}%  ~{sh:,} sh @ {p['price']:,.2f}")
     lines.append("\n_Simulated competition; not advice. Momentum is pro-cyclical — "
                  "it gives back hard in market reversals. Rebalance on schedule._")
     message = "\n".join(lines)

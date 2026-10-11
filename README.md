@@ -266,6 +266,25 @@ divide by trailing volatility): it does **not** raise the edge, but it shrank
 the worst-case windows markedly (≈ −7% vs −25%) — a smoother ride for teams who
 value surviving their one bad window over squeezing the mean. Off by default.
 
+### Enhancing how the book is held (fully-invested overlays)
+
+A further study tested *competition-legal* overlays (all stay fully invested,
+since cash falls behind the benchmark and breaks the deploy-in-week-1 rule):
+inverse-volatility weighting, defensive low-vol rotation in bear regimes,
+EMA-breakdown rotation, and weekly rebalancing. Judged train *and* test:
+
+- **Inverse-volatility weighting** was the only robust winner — it lifted the
+  train half (62→71% beat, IR 0.31→0.36), held the test half (81%), and trimmed
+  max drawdown (−38→−36%). It's now the **default** (`MOM_WEIGHT=invvol`,
+  capped at 20%/name; set `MOM_WEIGHT=equal` for the simpler scheme).
+- Defensive rotation hurt return; **weekly rebalance** showed a dazzling test
+  (+7.9% median) but a **losing train** (−0.6%) — a regime-fit mirage, rejected.
+  Breakdown rotation was similarly inconsistent across halves.
+
+Net: momentum selection + inverse-vol sizing is the robust frontier. More
+tuning from here mostly overfits; the real unknown is forward (survivorship-
+free) performance.
+
 ### ⚠️ A note on "tune it to beat October" / calendar windows
 
 Tuning parameters until the backtest shows a high win rate on a **hand-picked
