@@ -109,6 +109,22 @@ class StrategyConfig:
     reward_risk_ratio: float = field(default_factory=lambda: _env_float("REWARD_RISK_RATIO", 1.5))
     max_hold_days: int = field(default_factory=lambda: _env_int("MAX_HOLD_DAYS", 2))
 
+    # Exit style:
+    #   "swing" (default): fixed target (reward_risk_ratio) + ATR stop + a
+    #            max_hold_days time stop. Caps every win at ~reward_risk_ratio R.
+    #   "trend": NO fixed target. Ride the move with an ATR trailing stop and an
+    #            optional EMA-break exit, up to max_trend_days. Lower win rate,
+    #            but winners can run to many R -- the "place well" profile.
+    # Default is "trend" because the goal is to PLACE WELL in the competition:
+    # ride winners for outsized moves. It wins LESS often than swing (~39% vs
+    # ~53%) but ~6-7x the expectancy per trade. Set EXIT_MODE=swing for the
+    # old fixed-target behaviour.
+    exit_mode: str = field(default_factory=lambda: os.getenv("EXIT_MODE", "trend"))
+    trail_atr_mult: float = field(default_factory=lambda: _env_float("TRAIL_ATR_MULT", 3.0))
+    max_trend_days: int = field(default_factory=lambda: _env_int("MAX_TREND_DAYS", 30))
+    # In trend mode, also exit when a close falls back below the mid EMA.
+    use_ema_trend_exit: bool = field(default_factory=lambda: _env_bool("USE_EMA_TREND_EXIT", True))
+
     # How many setups to surface per scan (also capped by portfolio slots)
     max_signals: int = field(default_factory=lambda: _env_int("MAX_SIGNALS", 10))
 

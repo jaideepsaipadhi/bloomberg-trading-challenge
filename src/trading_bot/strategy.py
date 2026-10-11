@@ -48,6 +48,7 @@ class Signal:
     ema_fast: float
     ema_mid: float
     ema_slow: float
+    exit_plan: str = ""       # how to manage the exit (trail vs fixed target)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -160,6 +161,19 @@ def build_signal(symbol: str, df: pd.DataFrame, cfg, portfolio,
     notional = shares * entry
     dollar_risk = shares * risk_per_share
 
+    if cfg.exit_mode == "trend":
+        trail = cfg.trail_atr_mult * atr_val
+        exit_plan = (
+            f"TREND: initial stop {stop:.2f}; trail {cfg.trail_atr_mult:g}xATR "
+            f"(~{trail:.2f}) under the highs; exit on a close below EMA{cfg.ema_mid} "
+            f"or after {cfg.max_trend_days}d. Let it run."
+        )
+    else:
+        exit_plan = (
+            f"SWING: target {target:.2f} (1:{cfg.reward_risk_ratio:g}), "
+            f"stop {stop:.2f}, time-stop {cfg.max_hold_days}d."
+        )
+
     return Signal(
         symbol=symbol,
         date=str(data.index[-1].date()) if hasattr(data.index[-1], "date") else str(data.index[-1]),
@@ -181,6 +195,7 @@ def build_signal(symbol: str, df: pd.DataFrame, cfg, portfolio,
         ema_fast=round(float(row["ema_fast"]), 4),
         ema_mid=round(float(row["ema_mid"]), 4),
         ema_slow=round(float(row["ema_slow"]), 4),
+        exit_plan=exit_plan,
     )
 
 

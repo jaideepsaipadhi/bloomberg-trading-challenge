@@ -7,18 +7,22 @@ from .strategy import Signal
 
 
 DISCLAIMER = (
-    "These are candidate setups for a *simulated* competition, not financial "
-    "advice and not guaranteed winners. Always use the stop. Expected win rate "
-    "for this style is ~45-60%; the edge is winners > losers over many trades."
+    "Candidate setups for a *simulated* competition - not financial advice, not "
+    "guaranteed winners. Always use the stop. This trend-riding style wins only "
+    "~40% of the time ON PURPOSE: a few big winners outweigh many small losers. "
+    "Expect losing trades; the edge is in the right tail over many trades."
 )
 
 
 def format_signal(sig: Signal, rank: int) -> str:
+    plan = sig.exit_plan or (
+        f"target {sig.target:,.2f} (1:{sig.reward_risk:g}), stop {sig.stop:,.2f}"
+    )
     return (
         f"{rank}. *{sig.symbol}* (LONG)\n"
-        f"   Entry ~{sig.entry:,.2f}  |  Stop {sig.stop:,.2f}  |  Target {sig.target:,.2f}\n"
-        f"   Risk/Reward 1:{sig.reward_risk:g}  |  Shares {sig.shares:,}  "
+        f"   Entry ~{sig.entry:,.2f}  |  Shares {sig.shares:,}  "
         f"(${sig.notional:,.0f} notional, ${sig.dollar_risk:,.0f} at risk)\n"
+        f"   Plan: {plan}\n"
         f"   RSI {sig.rsi:g}  ROC {sig.roc:g}%  Vol x{sig.vol_ratio:g}  "
         f"ATR {sig.atr:,.2f}  Score {sig.score:.2f}"
     )
@@ -26,7 +30,8 @@ def format_signal(sig: Signal, rank: int) -> str:
 
 def format_message(signals: list[Signal], as_of: str | None = None) -> str:
     stamp = as_of or datetime.now().strftime("%Y-%m-%d")
-    header = f"📊 *Momentum + EMA setups* — {stamp}\nHold: 1-2 days.  $100k/trade.\n"
+    header = (f"📊 *Momentum + EMA setups* — {stamp}\n"
+              f"Ride winners (trail stop), cut losers fast. $100k/trade.\n")
 
     if not signals:
         body = (

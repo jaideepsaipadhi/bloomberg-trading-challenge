@@ -57,11 +57,17 @@ A candidate **long** setup fires on a daily bar when ALL of these hold:
 Risk management, defined **before** entry:
 
 - **Stop:** `entry − 1.5 × ATR(14)`.
-- **Target:** `entry + 1.5 × (risk)` (a 1.5:1 reward/risk by default).
-- **Time stop:** exit after `MAX_HOLD_DAYS` (default 2) if neither hit.
-- **Sizing:** fixed **$100k notional** per trade → `shares = floor(100000 / entry)`.
-  With $1M that's a **max of 10 concurrent positions**; when more than 10
-  setups qualify, the strongest-scoring ones are kept.
+- **Exit — two modes (`EXIT_MODE`):**
+  - **`trend` (default):** no fixed target. Ride the move with a **3×ATR
+    trailing stop** that ratchets up under the highs, exit on a close below the
+    mid EMA or after `MAX_TREND_DAYS` (30). Winners can run to many multiples of
+    risk. This is the **"place well" profile** — see below.
+  - **`swing`:** fixed `1.5:1` target + ATR stop + a `MAX_HOLD_DAYS` (2) time
+    stop. Higher win rate, but every win is capped at 1.5R.
+- **Sizing:** **$100k notional** per trade → `shares = floor(100000 / entry)`.
+  With $1M that's up to **10 concurrent positions** (10% each, within the 20%
+  rule). When more than 10 setups qualify, the strongest-scoring are kept.
+  *(Conviction-weighted concentration is a planned next step — see below.)*
 
 All thresholds live in `src/trading_bot/config.py` and are overridable via env
 vars / `.env` — see `.env.example`.
@@ -142,6 +148,36 @@ changes with sound rationale that improved results — and then confirming them
   tiny-target trick that hides catastrophic risk.
 
 Run your own ablation on *your* competition universe before trusting any of it.
+
+### Riding winners vs. scalping them (why the default is `trend`)
+
+The competition is a short, winner-skewed tournament scored on *relative return*
+vs the WLS index. Past winners posted enormous numbers (+167%, +400% in a few
+weeks) by **concentrating and letting volatile positions run** — not by racking
+up a high win rate on tiny trades. To *place well* you need the same instinct in
+measured form: **ride winners, cut losers fast.**
+
+The backtest makes the trade-off concrete (15y, large-cap sample):
+
+| Exit | Win rate | Expectancy | Avg win | Best single win | Trades ≥3R |
+|---|---|---|---|---|---|
+| `swing` (1.5R, 2-day) | **53%** | +0.05R | 1.5R | 1.5R | 0% |
+| `trend` (trail 3×ATR) | **39%** | **+0.33R** | 2.0R | **~12R** | ~9% |
+
+Trend-riding **wins less than half the time yet earns ~6–7× the expectancy**,
+because a handful of trades run to 10×+ their risk and carry all the small
+losers. This is why "maximize win rate" is the wrong goal — and it's a robust,
+decades-documented effect, not a curve-fit. `trend` is the default; set
+`EXIT_MODE=swing` to revert.
+
+### Planned next (for the "place well" goal)
+
+- **Conviction-weighted concentration:** fewer, bigger positions (8–12, sized by
+  score, under the 20% cap) and full deployment in week 1, per the rules.
+- **Volatility/catalyst universe tilt:** add high-beta small/mid-caps and
+  catalyst names where the big moves live.
+- **Portfolio backtester:** compounded return and drawdown vs the benchmark
+  (the metric that actually decides your ranking), plus walk-forward validation.
 
 ### ⚠️ A note on "tune it to beat October" / calendar windows
 

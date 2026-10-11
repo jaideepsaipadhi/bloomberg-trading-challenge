@@ -111,6 +111,56 @@ class BacktestResult:
         }
 
 
+def _exit_swing(data, entry_idx, entry, stop, target, cfg, n):
+    """Fixed target + ATR stop + max_hold_days time stop. Returns
+    (outcome, exit_price, exit_idx, bars_held)."""
+    bars_held = 0
+    for h in range(cfg.max_hold_days):
+        bar_idx = entry_idx + h
+        if bar_idx >= n:
+            return "time", float(data.iloc[n - 1]["close"]), n - 1, bars_held
+        bar = data.iloc[bar_idx]
+        bars_held = h + 1
+        low, high = float(bar["low"]), float(bar["high"])
+        # Pessimistic: if both touched in one bar, assume the stop hit first.
+        if low <= stop:
+            return "stop", stop, bar_idx, bars_held
+        if high >= target:
+            return "target", target, bar_idx, bars_held
+        if h == cfg.max_hold_days - 1:
+            return "time", float(bar["close"]), bar_idx, bars_held
+    return "time", entry, entry_idx, bars_held
+
+
+def _exit_trend(data, entry_idx, entry, stop, risk, atr_val, cfg, n):
+    """Ride the move: ATR trailing stop (ratchets up on new highs) plus an
+    optional EMA-break exit, up to max_trend_days. No fixed target, so a
+    winner can run to many R. Returns (outcome, exit_price, exit_idx, bars_held)."""
+    highest = entry
+    bars_held = 0
+    for h in range(cfg.max_trend_days):
+        bar_idx = entry_idx + h
+        if bar_idx >= n:
+            return "time", float(data.iloc[n - 1]["close"]), n - 1, bars_held
+        bar = data.iloc[bar_idx]
+        bars_held = h + 1
+        low, high, close = float(bar["low"]), float(bar["high"]), float(bar["close"])
+        # Pessimistic: check the (already-ratcheted) stop against this bar's low first.
+        if low <= stop:
+            return "trail", stop, bar_idx, bars_held
+        # Optional trend-break exit on a close back below the mid EMA.
+        if cfg.use_ema_trend_exit:
+            ema_mid = bar.get("ema_mid")
+            if ema_mid is not None and not pd.isna(ema_mid) and close < float(ema_mid):
+                return "ema_exit", close, bar_idx, bars_held
+        # Ratchet the trailing stop up on new highs (never down).
+        highest = max(highest, high)
+        stop = max(stop, highest - cfg.trail_atr_mult * atr_val)
+        if h == cfg.max_trend_days - 1:
+            return "time", close, bar_idx, bars_held
+    return "time", entry, entry_idx, bars_held
+
+
 def backtest_symbol(symbol: str, df: pd.DataFrame, cfg,
                     regime: "pd.Series | None" = None) -> list[Trade]:
     """Replay the strategy over one symbol's history.
@@ -150,33 +200,15 @@ def backtest_symbol(symbol: str, df: pd.DataFrame, cfg,
         entry_idx = i + 1
         entry = float(data.iloc[entry_idx]["open"])
         stop = entry - risk
-        target = entry + risk * cfg.reward_risk_ratio
 
-        outcome = "time"
-        exit_price = entry
-        exit_idx = entry_idx
-        bars_held = 0
-
-        for h in range(cfg.max_hold_days):
-            bar_idx = entry_idx + h
-            if bar_idx >= n:
-                exit_idx = n - 1
-                exit_price = float(data.iloc[exit_idx]["close"])
-                break
-            bar = data.iloc[bar_idx]
-            bars_held = h + 1
-            low = float(bar["low"])
-            high = float(bar["high"])
-            # Pessimistic: if both touched, assume stop first.
-            if low <= stop:
-                outcome, exit_price, exit_idx = "stop", stop, bar_idx
-                break
-            if high >= target:
-                outcome, exit_price, exit_idx = "target", target, bar_idx
-                break
-            # time stop at the last allowed bar
-            if h == cfg.max_hold_days - 1:
-                outcome, exit_price, exit_idx = "time", float(bar["close"]), bar_idx
+        if cfg.exit_mode == "trend":
+            target = float("nan")  # no fixed target when riding the trend
+            outcome, exit_price, exit_idx, bars_held = _exit_trend(
+                data, entry_idx, entry, stop, risk, atr_val, cfg, n)
+        else:
+            target = entry + risk * cfg.reward_risk_ratio
+            outcome, exit_price, exit_idx, bars_held = _exit_swing(
+                data, entry_idx, entry, stop, target, cfg, n)
 
         r_multiple = (exit_price - entry) / risk if risk else 0.0
 

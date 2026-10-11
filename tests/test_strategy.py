@@ -123,6 +123,27 @@ def test_optional_filters_are_stricter():
     assert n_strict <= n_base
 
 
+def test_trend_exit_lets_winners_run_past_swing_cap():
+    """In a sustained uptrend, trend mode should capture more than the swing
+    target cap (1.5R), i.e. produce at least one trade with R clearly > 1.5."""
+    swing = StrategyConfig(); swing.exit_mode = "swing"
+    trend = StrategyConfig(); trend.exit_mode = "trend"; trend.use_ema_trend_exit = False
+    df = _trending_df(n=500, seed=3)
+    swing_r = [t.r_multiple for t in backtest_symbol("T", df, swing)]
+    trend_r = [t.r_multiple for t in backtest_symbol("T", df, trend)]
+    assert swing_r and trend_r
+    # Swing caps wins at the reward/risk ratio; trend has no such cap.
+    assert max(swing_r) <= swing.reward_risk_ratio + 0.05
+    assert max(trend_r) > swing.reward_risk_ratio
+
+
+def test_trend_signal_has_trailing_exit_plan():
+    cfg = StrategyConfig(); cfg.exit_mode = "trend"
+    sig = build_signal("TEST", _uptrend_df(), cfg, PortfolioConfig())
+    assert sig is not None
+    assert "TREND" in sig.exit_plan and "trail" in sig.exit_plan.lower()
+
+
 def test_regime_filter_blocks_when_risk_off():
     """With the regime filter on and benchmark risk-off, no signal fires."""
     cfg = StrategyConfig()
