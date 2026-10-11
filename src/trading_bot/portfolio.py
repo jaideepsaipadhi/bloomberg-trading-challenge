@@ -182,7 +182,7 @@ def _prepare(symbol_data: dict[str, pd.DataFrame], cfg):
 
 
 def simulate(symbol_data, cfg, pcfg, benchmark_close=None,
-             start_idx=None, end_idx=None, _prepared=None):
+             start_idx=None, end_idx=None, _prepared=None, regime=None):
     """Event-driven daily long-only portfolio simulation.
 
     Each day: (1) manage/exit held positions on that day's bar, (2) buy any
@@ -216,6 +216,13 @@ def simulate(symbol_data, cfg, pcfg, benchmark_close=None,
     trail = cfg.trail_atr_mult
     per_slot_target = 1.0 / max(1, pcfg.target_positions)
     cost = getattr(pcfg, "cost_bps", 0.0) / 10_000.0  # per-side fraction
+
+    # Market-regime overlay: when risk-off, take no NEW longs (existing
+    # positions still ride their trailing stops). Aligned to the calendar.
+    if regime is not None:
+        regime_ok = regime.reindex(calendar).ffill().fillna(False).to_numpy(dtype="bool")
+    else:
+        regime_ok = None
 
     for t in range(i0, i1 + 1):
         # ---- 1. manage existing positions on today's bar ----
@@ -275,7 +282,8 @@ def simulate(symbol_data, cfg, pcfg, benchmark_close=None,
 
         # ---- 3. queue tomorrow's entries from today's close signals ----
         free = pcfg.target_positions - len(positions)
-        if free > 0 and t < i1:
+        risk_on = True if regime_ok is None else bool(regime_ok[t])
+        if free > 0 and t < i1 and risk_on:
             cands = []
             for sym, d in data.items():
                 if sym in positions:
@@ -325,7 +333,7 @@ def simulate(symbol_data, cfg, pcfg, benchmark_close=None,
 
 
 def walk_forward(symbol_data, cfg, pcfg, benchmark_close=None,
-                 window_days=30, step_days=30):
+                 window_days=30, step_days=30, regime=None):
     """Run the simulation over consecutive windows (default ~6 trading weeks,
     the competition length) and summarise the distribution of outcomes —
     the honest answer to "how would this place?"."""
@@ -340,7 +348,7 @@ def walk_forward(symbol_data, cfg, pcfg, benchmark_close=None,
     while i + window_days <= n - 1:
         r = simulate(symbol_data, cfg, pcfg, benchmark_close,
                      start_idx=i, end_idx=i + window_days,
-                     _prepared=(calendar, data))
+                     _prepared=(calendar, data), regime=regime)
         if r is not None:
             results.append(r)
         i += step_days

@@ -192,11 +192,30 @@ python scripts/portfolio_backtest.py --period 5y --benchmark ACWI
 ```
 
 It runs the concentrated, trend-riding portfolio day by day (no look-ahead:
-close-signals execute at the next open), then reports a full-history run and a
-**walk-forward over ~6-week windows** (the competition length): how often and
-by how much it beats the benchmark, including the right-tail (p90) outcome that
-placing well depends on. Use `--benchmark ACWI` (global, ≈ WLS) — `SPY` is a
-much tougher US-large-cap bar. WLS itself is Terminal-only.
+close-signals execute at the next open), with realistic trading costs
+(`COST_BPS`, 5 bps/side), then reports a full-history run and a **walk-forward
+over ~6-week windows** (the competition length): how often and by how much it
+beats the benchmark, including the right-tail (p90) outcome that placing well
+depends on. Use `--benchmark ACWI` (global, ≈ WLS) — `SPY` is a much tougher
+US-large-cap bar. WLS itself is Terminal-only.
+
+### What tuning did and didn't help (honest log)
+
+Two disciplined, train-then-held-out-test optimisation passes were run:
+
+- **Parameter grid** (trail / position count / max hold): the config that scored
+  best on the *training* years did **worse on the held-out test** than the
+  existing default — a textbook overfit. **Nothing adopted.**
+- **Market-regime overlay** (no new longs when ACWI is below its EMA): did
+  **not** improve return (a fast EMA50 version actively hurt via whipsaws);
+  a slow EMA100 version only trimmed drawdown slightly. Kept as an **optional,
+  off-by-default** risk tool (`simulate(..., regime=...)`), not a profit lever.
+
+Takeaway: the current default sits near the robust frontier for this approach.
+Further gains come from **new alpha or clean forward evidence**, not more
+curve-fitting — and every full-period return here is inflated by **survivorship
+bias** (today's index members only), so trust the walk-forward over the
+headline total.
 
 ### ⚠️ A note on "tune it to beat October" / calendar windows
 

@@ -98,3 +98,15 @@ def test_walk_forward_produces_windows():
     res = walk_forward(data, cfg, pcfg, window_days=30, step_days=30)
     assert len(res) >= 3
     assert all(w.end_equity > 0 for w in res)
+
+
+def test_regime_overlay_blocks_new_longs_when_risk_off():
+    """With an all-risk-off regime, the simulator opens no positions."""
+    data = {f"S{i}": _ohlc(seed=i) for i in range(6)}
+    cfg, pcfg = StrategyConfig(), PortfolioConfig()
+    sample = next(iter(data.values()))
+    risk_off = pd.Series(False, index=sample.index)
+    r = simulate(data, cfg, pcfg, regime=risk_off)
+    assert r is not None
+    assert r.n_trades == 0
+    assert abs(r.end_equity - pcfg.total_capital) < 1e-6
