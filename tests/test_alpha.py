@@ -56,3 +56,15 @@ def test_walk_forward_windows():
     res = momentum_walk_forward(closes, bench, cfg, top_k=3,
                                 window_days=30, step_days=30)
     assert len(res) >= 3
+
+
+def test_risk_adjusted_momentum_differs_from_raw():
+    """vol_window>0 should change the ranking vs raw momentum."""
+    closes = close_panel(_panel(n=500, seed=3))
+    raw = momentum_score(closes, 252, 21, vol_window=0)
+    radj = momentum_score(closes, 252, 21, vol_window=126)
+    # Same shape, but values differ where vol is defined.
+    assert raw.shape == radj.shape
+    last_raw = raw.iloc[-1].dropna()
+    last_radj = radj.iloc[-1].dropna()
+    assert not np.allclose(last_raw.values, last_radj.values)

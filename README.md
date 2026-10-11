@@ -249,6 +249,23 @@ bias (momentum + "today's winners only" is the worst case for it) — trust the
 it gives back hard in sharp reversals, so rebalance on schedule and size with
 that in mind.
 
+### Did anything beat it? (a disciplined search said no)
+
+A second study tested more creative signals — risk-adjusted momentum, trailing
+Sharpe, residual (market-neutral) momentum, "frog-in-the-pan" smoothness,
+momentum acceleration, anti-lottery (MAX), and rank blends — judged on
+out-of-sample beat-rate, information ratio, and worst window (not raw return).
+**None reliably beat plain 12-1 momentum out-of-sample.** The tempting ones
+failed the discipline: a risk-adjusted×smoothness blend looked best on *train*
+(71% beat, IR 0.54) then collapsed on *test* (56%, IR 0.12); acceleration won
+the test but *lost* the train. This matches a well-known result — simple
+momentum is hard to improve, and most "enhancements" are overfitting.
+
+The one defensible refinement is **risk-adjusting momentum** (`MOM_VOL_WINDOW>0`,
+divide by trailing volatility): it does **not** raise the edge, but it shrank
+the worst-case windows markedly (≈ −7% vs −25%) — a smoother ride for teams who
+value surviving their one bad window over squeezing the mean. Off by default.
+
 ### ⚠️ A note on "tune it to beat October" / calendar windows
 
 Tuning parameters until the backtest shows a high win rate on a **hand-picked

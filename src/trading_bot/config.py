@@ -160,6 +160,10 @@ class StrategyConfig:
     mom_skip: int = field(default_factory=lambda: _env_int("MOM_SKIP", 21))
     mom_rebalance_days: int = field(default_factory=lambda: _env_int("MOM_REBALANCE_DAYS", 21))
     mom_top_k: int = field(default_factory=lambda: _env_int("MOM_TOP_K", 20))
+    # >0 risk-adjusts momentum by trailing return vol over this many days.
+    # Doesn't raise the edge but shrinks worst-case windows (smoother ride).
+    # Default 0 (raw momentum, highest raw edge).
+    mom_vol_window: int = field(default_factory=lambda: _env_int("MOM_VOL_WINDOW", 0))
 
     @property
     def min_bars_required(self) -> int:

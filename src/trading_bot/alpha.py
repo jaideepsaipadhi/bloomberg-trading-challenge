@@ -28,9 +28,19 @@ def close_panel(symbol_data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return pd.DataFrame({s: df["close"] for s, df in symbol_data.items()}).sort_index()
 
 
-def momentum_score(closes: pd.DataFrame, lookback: int, skip: int) -> pd.DataFrame:
-    """Trailing return over `lookback` days, skipping the last `skip` days."""
-    return closes.shift(skip) / closes.shift(lookback) - 1.0
+def momentum_score(closes: pd.DataFrame, lookback: int, skip: int,
+                   vol_window: int = 0) -> pd.DataFrame:
+    """Trailing return over `lookback` days, skipping the last `skip` days.
+
+    If ``vol_window`` > 0, divide by trailing return volatility (risk-adjusted
+    momentum). This does NOT raise the edge vs raw momentum, but in testing it
+    shrank the worst-case windows markedly — a smoother ride for "place well".
+    """
+    raw = closes.shift(skip) / closes.shift(lookback) - 1.0
+    if vol_window and vol_window > 0:
+        vol = closes.pct_change().rolling(vol_window).std()
+        raw = raw / (vol + 1e-9)
+    return raw
 
 
 @dataclass
@@ -65,7 +75,7 @@ def momentum_backtest(closes: pd.DataFrame, bench_close, cfg,
     n = len(cal)
     end = n if end is None else min(end, n)
     rets = closes.pct_change()
-    score = momentum_score(closes, cfg.mom_lookback, cfg.mom_skip)
+    score = momentum_score(closes, cfg.mom_lookback, cfg.mom_skip, getattr(cfg, "mom_vol_window", 0))
 
     idx = cal[start:end]
     port_daily = pd.Series(0.0, index=idx)
@@ -122,7 +132,7 @@ def momentum_picks(symbol_data, cfg, top_k=None):
     """
     top_k = top_k or cfg.mom_top_k
     closes = close_panel(symbol_data)
-    score = momentum_score(closes, cfg.mom_lookback, cfg.mom_skip)
+    score = momentum_score(closes, cfg.mom_lookback, cfg.mom_skip, getattr(cfg, "mom_vol_window", 0))
     latest = score.iloc[-1].replace([np.inf, -np.inf], np.nan).dropna()
     ranked = latest.sort_values(ascending=False).head(top_k)
     prices = closes.iloc[-1]
