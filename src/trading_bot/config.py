@@ -42,9 +42,22 @@ class PortfolioConfig:
     total_capital: float = field(default_factory=lambda: _env_float("TOTAL_CAPITAL", 1_000_000.0))
     notional_per_trade: float = field(default_factory=lambda: _env_float("NOTIONAL_PER_TRADE", 100_000.0))
 
+    # --- Concentration / portfolio construction (the "place well" profile) ---
+    # Target number of concurrently-held names. Fewer, bigger positions => more
+    # concentrated => more upside dispersion (what placing well needs), while
+    # staying diversified enough not to be a pure lottery ticket.
+    target_positions: int = field(default_factory=lambda: _env_int("TARGET_POSITIONS", 10))
+    # Hard cap per name — the competition forbids >20% of notional in one name.
+    max_position_pct: float = field(default_factory=lambda: _env_float("MAX_POSITION_PCT", 0.20))
+    # Don't bother with dust positions.
+    min_position_pct: float = field(default_factory=lambda: _env_float("MIN_POSITION_PCT", 0.04))
+    # "score" = conviction-weight by signal score; "equal" = equal-weight.
+    sizing_mode: str = field(default_factory=lambda: os.getenv("SIZING_MODE", "score"))
+
     @property
     def max_concurrent_positions(self) -> int:
-        """How many $notional trades the capital supports at once."""
+        """How many $notional trades the capital supports at once (legacy
+        fixed-notional sizing). Concentration sizing uses target_positions."""
         if self.notional_per_trade <= 0:
             return 0
         return int(self.total_capital // self.notional_per_trade)
@@ -78,6 +91,12 @@ class StrategyConfig:
     # Volume confirmation
     volume_avg_period: int = field(default_factory=lambda: _env_int("VOLUME_AVG_PERIOD", 20))
     volume_ratio_min: float = field(default_factory=lambda: _env_float("VOLUME_RATIO_MIN", 1.2))
+
+    # Volatility tilt: reward higher-ATR% (bigger-moving) names in the ranking,
+    # so the book leans toward the movers where competition outperformance lives.
+    # vol_ref is the ATR/price that maps to a full tilt score (5% = 1.0).
+    use_vol_tilt: bool = field(default_factory=lambda: _env_bool("USE_VOL_TILT", True))
+    vol_tilt_ref: float = field(default_factory=lambda: _env_float("VOL_TILT_REF", 0.05))
 
     # Anti-chasing: reject entries too far above the fast EMA (parabolic blow-offs)
     max_atr_extension: float = field(default_factory=lambda: _env_float("MAX_ATR_EXTENSION", 3.0))

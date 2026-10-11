@@ -28,10 +28,11 @@ def format_signal(sig: Signal, rank: int) -> str:
     )
 
 
-def format_message(signals: list[Signal], as_of: str | None = None) -> str:
+def format_message(signals: list[Signal], as_of: str | None = None,
+                   allocations=None) -> str:
     stamp = as_of or datetime.now().strftime("%Y-%m-%d")
     header = (f"📊 *Momentum + EMA setups* — {stamp}\n"
-              f"Ride winners (trail stop), cut losers fast. $100k/trade.\n")
+              f"Ride winners (trail stop), cut losers fast.\n")
 
     if not signals:
         body = (
@@ -42,4 +43,12 @@ def format_message(signals: list[Signal], as_of: str | None = None) -> str:
 
     lines = [format_signal(s, i + 1) for i, s in enumerate(signals)]
     body = "\n\n".join(lines)
-    return f"{header}\n{body}\n\n_{DISCLAIMER}_"
+
+    book = ""
+    if allocations:
+        picks = "  ".join(f"{a.symbol} {a.weight*100:.0f}%" for a in allocations)
+        deployed = sum(a.dollars for a in allocations)
+        book = (f"\n\n*Suggested concentrated book* (conviction-weighted, "
+                f"≤20%/name, ~${deployed:,.0f} deployed):\n{picks}")
+
+    return f"{header}\n{body}{book}\n\n_{DISCLAIMER}_"

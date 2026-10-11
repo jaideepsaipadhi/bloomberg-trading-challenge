@@ -1,0 +1,57 @@
+# High-volatility / catalyst supplement (US-listed) for the WLS universe.
+# These are liquid, higher-beta names (growth/tech, biotech, crypto-proxy,
+# EV/clean-energy, momentum/retail) that tend to produce the big moves that
+# win short tournaments. Names already in the S&P 500/400 are de-duped away by
+# scripts/build_universe.py, so only net-new tickers are added.
+#
+# >>> CURATED STARTER LIST — verify each is currently tradeable under the
+#     competition's WLS eligibility before relying on it. Tickers are Yahoo
+#     conventions. Several are ADRs (US-listed foreign); drop them if you want
+#     to stay strictly domestic.
+symbol
+# --- high-beta growth / software ---
+SNOW
+NET
+RBLX
+U
+AFRM
+SOFI
+SHOP
+DKNG
+PATH
+GTLB
+ASAN
+PINS
+# --- semis / hardware (high beta) ---
+ARM
+# --- crypto proxies / miners ---
+MSTR
+MARA
+RIOT
+CLSK
+# --- EV / clean energy ---
+RIVN
+LCID
+PLUG
+CHPT
+ENVX
+# --- biotech / catalyst-driven ---
+VKTX
+SRPT
+CRSP
+NTLA
+BEAM
+RXRX
+IONS
+# --- momentum / retail / misc ---
+AMC
+IONQ
+RGTI
+OKLO
+SMR
+# --- liquid US-listed ADRs (foreign; remove if staying domestic) ---
+BABA
+PDD
+NIO
+SE
+MELI

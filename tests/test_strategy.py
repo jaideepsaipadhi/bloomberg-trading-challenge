@@ -137,6 +137,30 @@ def test_trend_exit_lets_winners_run_past_swing_cap():
     assert max(trend_r) > swing.reward_risk_ratio
 
 
+def test_signal_frame_score_matches_build_signal():
+    """The vectorised score must equal the scalar score on the same bar."""
+    from trading_bot.strategy import signal_frame
+    cfg, port = StrategyConfig(), PortfolioConfig()
+    df = _uptrend_df()
+    sig = build_signal("X", df, cfg, port)
+    sf = signal_frame(df, cfg)
+    assert sig is not None
+    # build_signal rounds score to 4dp; signal_frame doesn't. Same formula.
+    assert abs(sig.score - float(sf["score"].iloc[-1])) < 1e-3
+    assert bool(sf["passes"].iloc[-1]) is True
+
+
+def test_vol_tilt_changes_score():
+    """Enabling the volatility tilt should change the ranking score."""
+    from trading_bot.strategy import _compute_score
+    base = StrategyConfig(); base.use_vol_tilt = False
+    tilt = StrategyConfig(); tilt.use_vol_tilt = True
+    args = dict(roc=5.0, rsi=62.0, vol_ratio=1.5, atr_extension=1.0, atr=5.0, close=100.0)
+    s_base = _compute_score(cfg=base, **args)
+    s_tilt = _compute_score(cfg=tilt, **args)
+    assert abs(s_base - s_tilt) > 1e-6
+
+
 def test_trend_signal_has_trailing_exit_plan():
     cfg = StrategyConfig(); cfg.exit_mode = "trend"
     sig = build_signal("TEST", _uptrend_df(), cfg, PortfolioConfig())

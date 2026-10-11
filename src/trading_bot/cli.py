@@ -18,6 +18,7 @@ from .universe import load_universe
 from . import data as data_mod
 from .strategy import scan
 from .backtest import backtest
+from .portfolio import allocate
 from .formatting import format_message
 from .whatsapp import build_notifier, ConsoleNotifier
 
@@ -55,7 +56,8 @@ def cmd_signals(args) -> int:
                   file=sys.stderr)
 
     signals = scan(symbol_data, cfg.strategy, cfg.portfolio, regime_ok=regime_ok)
-    message = format_message(signals)
+    allocations = allocate(signals, cfg.portfolio.total_capital, cfg.portfolio)
+    message = format_message(signals, allocations=allocations)
 
     notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
     result = notifier.send(message)
@@ -63,6 +65,7 @@ def cmd_signals(args) -> int:
     if args.json:
         print(json.dumps({
             "signals": [s.to_dict() for s in signals],
+            "allocations": [a.__dict__ for a in allocations],
             "delivery": result,
         }, indent=2))
     return 0

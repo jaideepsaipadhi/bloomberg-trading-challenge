@@ -104,26 +104,73 @@ def _passes_filters(row: pd.Series, cfg, regime_ok: bool = True) -> bool:
     return True
 
 
-def _score(row: pd.Series, cfg) -> float:
-    """Rank setups so the strongest float to the top when slots are scarce.
+def _compute_score(roc, rsi, vol_ratio, atr_extension, atr, close, cfg):
+    """Shared ranking score. Works elementwise, so it serves BOTH the scalar
+    path (build_signal, passing floats/Series values) and the vectorised path
+    (signal_frame, passing columns) — one formula, no divergence.
 
-    Blend of: momentum (ROC), RSI distance above 50 (trend strength without
-    overbought penalty), volume surge, and proximity to the fast EMA
-    (prefer tighter, lower-risk entries). All normalised to rough 0-1-ish
-    ranges before weighting.
+    Blend of momentum (ROC), trend strength (RSI above 50), volume surge, a
+    tightness term (prefer entries near the fast EMA = lower risk), and, when
+    enabled, a volatility tilt (prefer bigger-ATR% movers).
     """
-    roc_component = np.tanh(row["roc"] / 10.0)                 # saturates, ~0..1
-    rsi_component = np.clip((row["rsi"] - 50.0) / 25.0, 0, 1)   # 50->0, 75->1
-    vol_component = np.clip((row["vol_ratio"] - 1.0) / 2.0, 0, 1)
-    # Lower extension is better (tighter stop): invert.
-    tight_component = np.clip(1.0 - (row["atr_extension"] / cfg.max_atr_extension), 0, 1)
+    roc_c = np.tanh(roc / 10.0)                       # saturates, ~0..1
+    rsi_c = np.clip((rsi - 50.0) / 25.0, 0, 1)         # 50->0, 75->1
+    vol_c = np.clip((vol_ratio - 1.0) / 2.0, 0, 1)
+    tight_c = np.clip(1.0 - (atr_extension / cfg.max_atr_extension), 0, 1)
 
-    return float(
-        0.40 * roc_component
-        + 0.25 * rsi_component
-        + 0.20 * vol_component
-        + 0.15 * tight_component
-    )
+    if cfg.use_vol_tilt:
+        atrpct_c = np.clip((atr / close) / cfg.vol_tilt_ref, 0, 1)
+        return (0.35 * roc_c + 0.20 * rsi_c + 0.15 * vol_c
+                + 0.10 * tight_c + 0.20 * atrpct_c)
+    return 0.40 * roc_c + 0.25 * rsi_c + 0.20 * vol_c + 0.15 * tight_c
+
+
+def _score(row: pd.Series, cfg) -> float:
+    """Scalar score for a single bar (used by build_signal)."""
+    return float(_compute_score(
+        row["roc"], row["rsi"], row["vol_ratio"], row["atr_extension"],
+        row["atr"], row["close"], cfg))
+
+
+def signal_frame(df: pd.DataFrame, cfg) -> pd.DataFrame:
+    """Vectorised per-bar signal table for the whole history of one symbol.
+
+    Returns a DataFrame indexed by date with columns:
+      passes (bool), score (float), close, open, high, low, atr, ema_mid.
+    This mirrors _passes_filters / _score exactly but computed column-wise, so
+    the portfolio simulator can scan hundreds of symbols across thousands of
+    days without a per-bar Python loop. (The market-regime gate, if enabled, is
+    applied by the simulator against its own benchmark series.)
+    """
+    d = add_indicators(df, cfg)
+
+    stacked = (d["ema_fast"] > d["ema_mid"]) & (d["ema_mid"] > d["ema_slow"])
+    above_mid = d["close"] > d["ema_mid"]
+    momentum = (d["roc"] >= cfg.roc_min) & (d["rsi"] >= cfg.rsi_min) & (d["rsi"] <= cfg.rsi_max)
+    volume_ok = d["vol_ratio"] >= cfg.volume_ratio_min
+    not_overext = d["atr_extension"] <= cfg.max_atr_extension
+
+    passes = stacked & above_mid & momentum & volume_ok & not_overext & (d["atr"] > 0)
+    passes = passes.fillna(False)
+
+    if cfg.use_adx_filter:
+        passes &= (d["adx"] >= cfg.adx_min).fillna(False)
+    if cfg.use_slope_filter:
+        passes &= (d["ema_slow_slope"] >= cfg.slope_min).fillna(False)
+    if cfg.use_pullback_entry:
+        passes &= (d["atr_extension"] <= cfg.pullback_max_extension).fillna(False)
+
+    score = _compute_score(
+        d["roc"], d["rsi"], d["vol_ratio"], d["atr_extension"],
+        d["atr"], d["close"], cfg).fillna(0.0)
+
+    out = pd.DataFrame({
+        "passes": passes.astype(bool),
+        "score": score.astype(float),
+        "open": d["open"], "high": d["high"], "low": d["low"], "close": d["close"],
+        "atr": d["atr"], "ema_mid": d["ema_mid"],
+    }, index=d.index)
+    return out
 
 
 def build_signal(symbol: str, df: pd.DataFrame, cfg, portfolio,

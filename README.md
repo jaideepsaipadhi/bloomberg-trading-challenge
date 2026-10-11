@@ -170,14 +170,33 @@ losers. This is why "maximize win rate" is the wrong goal — and it's a robust,
 decades-documented effect, not a curve-fit. `trend` is the default; set
 `EXIT_MODE=swing` to revert.
 
-### Planned next (for the "place well" goal)
+### Placing well: concentration, volatility tilt, portfolio backtest
 
-- **Conviction-weighted concentration:** fewer, bigger positions (8–12, sized by
-  score, under the 20% cap) and full deployment in week 1, per the rules.
-- **Volatility/catalyst universe tilt:** add high-beta small/mid-caps and
-  catalyst names where the big moves live.
-- **Portfolio backtester:** compounded return and drawdown vs the benchmark
-  (the metric that actually decides your ranking), plus walk-forward validation.
+Three pieces now target the "place well" goal:
+
+- **Conviction-weighted concentration** (`trading_bot.portfolio.allocate`):
+  spreads the $1M across the top `TARGET_POSITIONS` (default 10) names,
+  conviction-weighted by score via water-filling, capped at `MAX_POSITION_PCT`
+  (20%, the rule), aiming for ~full deployment. The daily signal message prints
+  the suggested concentrated book.
+- **Volatility tilt** (`USE_VOL_TILT`, default on): the ranking score rewards
+  higher-ATR% movers, so the book leans toward names that can actually run.
+- **High-volatility universe** (`config/high_vol_supplement.csv`): adds ~37
+  liquid high-beta/biotech/crypto-proxy/catalyst names on top of the S&P
+  500+400 (regenerate with `python scripts/build_universe.py`).
+
+**Portfolio backtester** — the metric that actually sets your ranking:
+
+```bash
+python scripts/portfolio_backtest.py --period 5y --benchmark ACWI
+```
+
+It runs the concentrated, trend-riding portfolio day by day (no look-ahead:
+close-signals execute at the next open), then reports a full-history run and a
+**walk-forward over ~6-week windows** (the competition length): how often and
+by how much it beats the benchmark, including the right-tail (p90) outcome that
+placing well depends on. Use `--benchmark ACWI` (global, ≈ WLS) — `SPY` is a
+much tougher US-large-cap bar. WLS itself is Terminal-only.
 
 ### ⚠️ A note on "tune it to beat October" / calendar windows
 
