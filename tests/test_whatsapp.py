@@ -117,3 +117,20 @@ def test_telegram_retries_plain_on_parse_error(monkeypatch):
 def test_telegram_chat_ids_parsing():
     cfg = WhatsAppConfig(telegram_chat_ids_raw="-1001234567890, 987654321 ,")
     assert cfg.telegram_chat_ids == ["-1001234567890", "987654321"]
+
+
+# ---- momentum book formatting ----
+
+def test_format_momentum_book_renders_table():
+    from trading_bot.formatting import format_momentum_book
+    picks = [
+        {"symbol": "AMD", "price": 600.0, "weight": 0.05, "momentum": 1.1},
+        {"symbol": "MU", "price": 50.0, "weight": 0.055, "momentum": 0.9},
+    ]
+    msg = format_momentum_book(picks, equity=1_000_000, weight_scheme="invvol",
+                               as_of="Mon Oct 13")
+    assert "Momentum Book" in msg
+    assert "```" in msg                 # monospace table block
+    assert "TICKER" in msg and "SHARES" in msg
+    assert "AMD" in msg and "MU" in msg
+    assert "inverse-vol" in msg

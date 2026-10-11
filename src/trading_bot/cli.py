@@ -19,7 +19,7 @@ from . import data as data_mod
 from .strategy import scan
 from .backtest import backtest
 from .portfolio import allocate
-from .formatting import format_message
+from .formatting import format_message, format_momentum_book
 from .whatsapp import build_notifier, ConsoleNotifier
 
 
@@ -153,7 +153,6 @@ def cmd_ping(args) -> int:
 def cmd_momentum(args) -> int:
     """Live cross-sectional momentum book: today's top-K strongest names."""
     from .alpha import momentum_picks
-    from datetime import datetime
 
     cfg = load_config()
     symbols = load_universe(args.universe)
@@ -170,21 +169,8 @@ def cmd_momentum(args) -> int:
               f"but fetched period='{args.period}'. Use --period 2y or more. "
               f"Not posting an empty book.", file=sys.stderr)
         return 2
-    equity = cfg.portfolio.total_capital
-    wscheme = "inverse-vol" if cfg.strategy.mom_weight == "invvol" else "equal"
-
-    stamp = datetime.now().strftime("%Y-%m-%d")
-    lines = [f"🏆 *Momentum book* — {stamp}",
-             f"Hold the {len(picks)} strongest names (12-1 momentum), {wscheme}-weighted, "
-             f"rebalance ~monthly."]
-    for i, p in enumerate(picks, 1):
-        dollars = p.get("weight", 1.0 / max(1, len(picks))) * equity
-        sh = int(dollars // p["price"]) if p["price"] > 0 else 0
-        lines.append(f"{i}. *{p['symbol']}*  {p.get('weight', 0)*100:.0f}%  "
-                     f"mom {p['momentum']*100:+.0f}%  ~{sh:,} sh @ {p['price']:,.2f}")
-    lines.append("\n_Simulated competition; not advice. Momentum is pro-cyclical — "
-                 "it gives back hard in market reversals. Rebalance on schedule._")
-    message = "\n".join(lines)
+    message = format_momentum_book(picks, cfg.portfolio.total_capital,
+                                   cfg.strategy.mom_weight)
 
     notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
     result = notifier.send(message)

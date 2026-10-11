@@ -28,6 +28,43 @@ def format_signal(sig: Signal, rank: int) -> str:
     )
 
 
+def format_momentum_book(picks: list[dict], equity: float, weight_scheme: str,
+                         as_of: str | None = None) -> str:
+    """Render the momentum book as a clean, aligned monospace table (reads well
+    on phones in Telegram/Discord)."""
+    from datetime import datetime
+    stamp = as_of or datetime.now().strftime("%a %b %d")
+    wtxt = "inverse-vol weighted" if weight_scheme == "invvol" else "equal weighted"
+
+    rows = []
+    deployed = 0.0
+    for p in picks:
+        w = p.get("weight") or (1.0 / max(1, len(picks)))
+        price = p.get("price") or 0.0
+        sh = int((w * equity) // price) if price > 0 else 0
+        val = sh * price
+        deployed += val
+        rows.append((p["symbol"], sh, price, w, p.get("momentum", 0.0)))
+
+    hdr = f"{'TICKER':<7}{'SHARES':>7}{'PRICE':>10}{'WT':>6}"
+    body = [hdr, "-" * len(hdr)]
+    for sym, sh, price, w, _m in rows:
+        body.append(f"{sym:<7}{sh:>7,}{('$' + format(price, ',.2f')):>10}{w * 100:>5.1f}%")
+    table = "```\n" + "\n".join(body) + "\n```"
+
+    return "\n".join([
+        f"🏆 *Momentum Book* — {stamp}",
+        f"_Top {len(picks)} by 12-1 momentum · {wtxt} · ${deployed:,.0f} of "
+        f"${equity:,.0f} deployed_",
+        "",
+        table,
+        "📋 Hold these names; *sell* anything no longer on the list. "
+        "Rebalances ~monthly.",
+        "⚠️ _Simulated competition, not advice. This style wins <half the time "
+        "by design — a few big winners carry it. Rebalance on schedule._",
+    ])
+
+
 def format_message(signals: list[Signal], as_of: str | None = None,
                    allocations=None) -> str:
     stamp = as_of or datetime.now().strftime("%Y-%m-%d")
