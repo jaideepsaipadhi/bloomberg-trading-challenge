@@ -136,6 +136,20 @@ def cmd_recap(args) -> int:
     return 0 if result.get("delivered", True) else 1
 
 
+def cmd_ping(args) -> int:
+    """Send a tiny test message via the configured channel (no data fetch).
+    Fast way to verify delivery / credentials."""
+    from datetime import datetime
+    cfg = load_config()
+    msg = f"🔔 ping — delivery test ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
+    result = notifier.send(msg)
+    _report_delivery(result)
+    if args.json:
+        print(json.dumps(result, indent=2))
+    return 0 if result.get("delivered", True) else 1
+
+
 def cmd_momentum(args) -> int:
     """Live cross-sectional momentum book: today's top-K strongest names."""
     from .alpha import momentum_picks
@@ -274,6 +288,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     t = sub.add_parser("telegram-id", help="Discover Telegram chat/group ids for the bot")
     t.set_defaults(func=cmd_telegram_id)
+
+    pg = sub.add_parser("ping", help="Send a tiny delivery test (no data fetch)")
+    pg.add_argument("--dry-run", action="store_true", help="Force console output (no send)")
+    pg.add_argument("--json", action="store_true", help="Also print machine-readable JSON")
+    pg.set_defaults(func=cmd_ping)
 
     return parser
 
