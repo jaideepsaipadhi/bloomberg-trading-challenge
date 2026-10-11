@@ -57,3 +57,17 @@ def fetch_universe(
         if df is not None:
             out[sym] = df
     return out
+
+
+def fetch_regime_series(cfg, period: str = "2y"):
+    """Build the market-regime boolean Series for cfg.benchmark_symbol.
+
+    Returns ``(series, None)`` on success or ``(None, reason)`` on failure.
+    The series is True on dates where the benchmark closed above its EMA.
+    """
+    from .indicators import regime_ok_series
+
+    df = fetch_one(cfg.benchmark_symbol, period=period)
+    if df is None:
+        return None, f"could not fetch benchmark {cfg.benchmark_symbol!r}"
+    return regime_ok_series(df["close"], cfg.regime_ema), None

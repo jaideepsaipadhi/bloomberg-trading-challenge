@@ -53,6 +53,32 @@ def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> 
     return tr.ewm(alpha=1.0 / period, adjust=False).mean()
 
 
+def adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """Average Directional Index (Wilder) — trend STRENGTH, regardless of
+    direction. High ADX (>~20-25) = a real trend; low ADX = chop to avoid."""
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0.0)
+    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0.0)
+    plus_dm = pd.Series(plus_dm, index=high.index)
+    minus_dm = pd.Series(minus_dm, index=high.index)
+
+    tr = true_range(high, low, close)
+    alpha = 1.0 / period
+    atr_ = tr.ewm(alpha=alpha, adjust=False).mean()
+    plus_di = 100.0 * plus_dm.ewm(alpha=alpha, adjust=False).mean() / atr_.replace(0.0, np.nan)
+    minus_di = 100.0 * minus_dm.ewm(alpha=alpha, adjust=False).mean() / atr_.replace(0.0, np.nan)
+
+    di_sum = (plus_di + minus_di).replace(0.0, np.nan)
+    dx = 100.0 * (plus_di - minus_di).abs() / di_sum
+    return dx.ewm(alpha=alpha, adjust=False).mean()
+
+
+def regime_ok_series(benchmark_close: pd.Series, ema_span: int) -> pd.Series:
+    """Boolean Series: is the benchmark above its own EMA (risk-on uptrend)?"""
+    return benchmark_close > ema(benchmark_close, ema_span)
+
+
 def add_indicators(df: pd.DataFrame, cfg) -> pd.DataFrame:
     """Return a copy of ``df`` with all strategy indicators attached.
 
@@ -68,8 +94,12 @@ def add_indicators(df: pd.DataFrame, cfg) -> pd.DataFrame:
     out["roc"] = roc(close, cfg.roc_lookback)
     out["rsi"] = rsi(close, cfg.rsi_period)
     out["atr"] = atr(out["high"], out["low"], close, cfg.atr_period)
+    out["adx"] = adx(out["high"], out["low"], close, cfg.adx_period)
     out["vol_avg"] = out["volume"].rolling(cfg.volume_avg_period).mean()
     out["vol_ratio"] = out["volume"] / out["vol_avg"]
     # How far price has extended above the fast EMA, measured in ATRs.
     out["atr_extension"] = (close - out["ema_fast"]) / out["atr"]
+    # Slope of the slow EMA (is the longer trend actually rising?), normalised
+    # to percent-per-bar so it's comparable across price levels.
+    out["ema_slow_slope"] = out["ema_slow"].pct_change() * 100.0
     return out

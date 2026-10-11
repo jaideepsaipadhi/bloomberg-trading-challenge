@@ -41,7 +41,20 @@ def cmd_signals(args) -> int:
     symbol_data = data_mod.fetch_universe(symbols, period=args.period)
     print(f"Got data for {len(symbol_data)}/{len(symbols)} symbols.", file=sys.stderr)
 
-    signals = scan(symbol_data, cfg.strategy, cfg.portfolio)
+    regime_ok = True
+    if cfg.strategy.use_regime_filter:
+        series, reason = data_mod.fetch_regime_series(cfg.strategy, period="2y")
+        if series is None:
+            print(f"WARNING: regime filter on but {reason}; treating as risk-off.",
+                  file=sys.stderr)
+            regime_ok = False
+        else:
+            regime_ok = bool(series.iloc[-1])
+            print(f"Market regime ({cfg.strategy.benchmark_symbol} vs EMA"
+                  f"{cfg.strategy.regime_ema}): {'RISK-ON' if regime_ok else 'RISK-OFF'}.",
+                  file=sys.stderr)
+
+    signals = scan(symbol_data, cfg.strategy, cfg.portfolio, regime_ok=regime_ok)
     message = format_message(signals)
 
     notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
@@ -68,7 +81,14 @@ def cmd_backtest(args) -> int:
     symbol_data = data_mod.fetch_universe(symbols, period=args.period)
     print(f"Got data for {len(symbol_data)}/{len(symbols)} symbols.", file=sys.stderr)
 
-    result = backtest(symbol_data, cfg.strategy)
+    regime = None
+    if cfg.strategy.use_regime_filter:
+        regime, reason = data_mod.fetch_regime_series(cfg.strategy, period=args.period)
+        if regime is None:
+            print(f"WARNING: regime filter on but {reason}; proceeding without it.",
+                  file=sys.stderr)
+
+    result = backtest(symbol_data, cfg.strategy, regime=regime)
     summary = result.summary()
 
     print("\n==== BACKTEST (honest stats) ====")

@@ -111,19 +111,32 @@ class BacktestResult:
         }
 
 
-def backtest_symbol(symbol: str, df: pd.DataFrame, cfg) -> list[Trade]:
-    """Replay the strategy over one symbol's history."""
+def backtest_symbol(symbol: str, df: pd.DataFrame, cfg,
+                    regime: "pd.Series | None" = None) -> list[Trade]:
+    """Replay the strategy over one symbol's history.
+
+    ``regime`` is an optional boolean Series (benchmark above its EMA), indexed
+    by date. When cfg.use_regime_filter is set, each bar is only eligible if the
+    regime was risk-on on that date.
+    """
     if df is None or len(df) < cfg.min_bars_required + cfg.max_hold_days + 1:
         return []
 
     data = add_indicators(df, cfg)
+    # Align the regime verdict to this symbol's dates (forward-fill, no look-ahead).
+    if cfg.use_regime_filter and regime is not None:
+        regime_aligned = regime.reindex(data.index).ffill().fillna(False).astype(bool)
+    else:
+        regime_aligned = None
+
     trades: list[Trade] = []
     n = len(data)
 
     i = cfg.min_bars_required
     while i < n - 1:  # need at least a next bar to enter on
         row = data.iloc[i]
-        if not _passes_filters(row, cfg):
+        regime_ok = bool(regime_aligned.iloc[i]) if regime_aligned is not None else True
+        if not _passes_filters(row, cfg, regime_ok=regime_ok):
             i += 1
             continue
 
@@ -192,11 +205,12 @@ def backtest_symbol(symbol: str, df: pd.DataFrame, cfg) -> list[Trade]:
     return trades
 
 
-def backtest(symbol_data: dict[str, pd.DataFrame], cfg) -> BacktestResult:
+def backtest(symbol_data: dict[str, pd.DataFrame], cfg,
+             regime: "pd.Series | None" = None) -> BacktestResult:
     result = BacktestResult()
     for symbol, df in symbol_data.items():
         try:
-            result.trades.extend(backtest_symbol(symbol, df, cfg))
+            result.trades.extend(backtest_symbol(symbol, df, cfg, regime=regime))
         except Exception:
             continue
     # chronological order for the equity curve / drawdown

@@ -27,9 +27,10 @@ What a good short-term momentum system actually looks like:
 | Risk control | hard stop on every trade | "it'll come back" |
 
 The honest backtester in this repo reports the **true** win rate and
-expectancy. On a 2-year sample of large-cap stocks it shows ~51% win rate and
-roughly break-even expectancy at the strict 1–2 day horizon — which is exactly
-the point: **the edge is small and must be validated, never assumed.**
+expectancy. After tuning (see "Tuning the strategy" below), a 5-year large-cap
+sample shows roughly **54% win rate** with a small **positive** expectancy and
+a profit factor near 1.3 — a modest, real edge. Not 99%. **The edge is small
+and must be validated on your universe, never assumed.**
 
 A key finding from the built-in sensitivity probe: as you raise the profit
 target, the win rate *falls* (e.g. a 2.5:1 reward/risk target won only ~47% of
@@ -102,6 +103,44 @@ trading-bot signals --json               # also emit machine-readable JSON
 ```
 
 ---
+
+## Tuning the strategy (how the defaults were chosen)
+
+The defaults were set by an **ablation study** on 5 years of data, keeping only
+changes with sound rationale that improved results — and then confirming them
+**out-of-sample**. Honest findings:
+
+- **The win-rate lever that works is the momentum "sweet spot":** RSI 55–70
+  **and** ROC ≥ 2% **and** volume ≥ 1.2× average. Too-weak momentum = fakeouts;
+  too-hot = exhaustion. This raised win rate ~51% → ~54%, roughly **4×'d**
+  expectancy, and **halved** max drawdown — and it held up in *both* halves of
+  an out-of-sample time split. These are now the defaults.
+- **The classic regime/ADX/slope filters barely moved the needle** on a
+  large-cap universe that trended up for years (there was little chop or
+  risk-off to filter out). They are included but **off by default** — on a
+  broader or weaker real universe they may matter much more, so test them.
+- **Win rate tops out in the low-to-mid 50s%.** That is what a real edge looks
+  like. Anything claiming far more is either overfit or using a no-stop,
+  tiny-target trick that hides catastrophic risk.
+
+Run your own ablation on *your* competition universe before trusting any of it.
+
+### ⚠️ A note on "tune it to beat October" / calendar windows
+
+Tuning parameters until the backtest shows a high win rate on a **hand-picked
+calendar window** (e.g. mid-Oct → mid-Nov) is **overfitting**, not a strategy.
+A study on 15 years of data showed:
+
+- The window has a mild *bullish index tilt* (SPY up in 13/15 years, ~+3% mean)
+  — but with a big spread (−5% in 2012), and this is an **index drift over a
+  month**, not an 80% hit rate on 1–2 day trades.
+- Momentum+EMA actually performed **slightly worse** in that window than the
+  rest of the year, and the per-year win rate swung from **17% to 92%** on
+  tiny samples — i.e. noise. You could "prove" 80%+ by cherry-picking a good
+  year, then watch it crater the next.
+
+Optimising to a calendar window produces a number that evaporates the moment
+you trade it live — which is *during* the competition. Don't.
 
 ## WhatsApp delivery
 

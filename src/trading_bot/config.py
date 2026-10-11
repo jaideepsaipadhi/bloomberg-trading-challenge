@@ -28,6 +28,13 @@ def _env_int(name: str, default: int) -> int:
     return int(raw) if raw not in (None, "") else default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw in (None, ""):
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass
 class PortfolioConfig:
     """Capital and position-sizing rules for the paper portfolio."""
@@ -58,19 +65,43 @@ class StrategyConfig:
     ema_mid: int = field(default_factory=lambda: _env_int("EMA_MID", 21))
     ema_slow: int = field(default_factory=lambda: _env_int("EMA_SLOW", 50))
 
-    # Momentum
+    # Momentum. The RSI band + ROC floor define a "momentum sweet spot":
+    # strong enough to trend (not a weak fakeout), not so hot it's exhausted.
+    # These tuned defaults improved win rate AND expectancy in both halves of
+    # an out-of-sample split (see README "Tuning the strategy").
     roc_lookback: int = field(default_factory=lambda: _env_int("ROC_LOOKBACK", 10))
-    roc_min: float = field(default_factory=lambda: _env_float("ROC_MIN", 0.0))  # percent
+    roc_min: float = field(default_factory=lambda: _env_float("ROC_MIN", 2.0))  # percent
     rsi_period: int = field(default_factory=lambda: _env_int("RSI_PERIOD", 14))
-    rsi_min: float = field(default_factory=lambda: _env_float("RSI_MIN", 50.0))
-    rsi_max: float = field(default_factory=lambda: _env_float("RSI_MAX", 75.0))
+    rsi_min: float = field(default_factory=lambda: _env_float("RSI_MIN", 55.0))
+    rsi_max: float = field(default_factory=lambda: _env_float("RSI_MAX", 70.0))
 
     # Volume confirmation
     volume_avg_period: int = field(default_factory=lambda: _env_int("VOLUME_AVG_PERIOD", 20))
-    volume_ratio_min: float = field(default_factory=lambda: _env_float("VOLUME_RATIO_MIN", 1.0))
+    volume_ratio_min: float = field(default_factory=lambda: _env_float("VOLUME_RATIO_MIN", 1.2))
 
     # Anti-chasing: reject entries too far above the fast EMA (parabolic blow-offs)
     max_atr_extension: float = field(default_factory=lambda: _env_float("MAX_ATR_EXTENSION", 3.0))
+
+    # --- Optional win-rate filters (default OFF = baseline). See README. ---
+
+    # Market-regime filter: only go long when the benchmark is above its EMA.
+    use_regime_filter: bool = field(default_factory=lambda: _env_bool("USE_REGIME_FILTER", False))
+    benchmark_symbol: str = field(default_factory=lambda: os.getenv("BENCHMARK_SYMBOL", "SPY"))
+    regime_ema: int = field(default_factory=lambda: _env_int("REGIME_EMA", 100))
+
+    # Trend-strength filter: skip chop, require a real trend (ADX).
+    use_adx_filter: bool = field(default_factory=lambda: _env_bool("USE_ADX_FILTER", False))
+    adx_period: int = field(default_factory=lambda: _env_int("ADX_PERIOD", 14))
+    adx_min: float = field(default_factory=lambda: _env_float("ADX_MIN", 20.0))
+
+    # Rising-trend filter: require the slow EMA itself to be sloping up.
+    use_slope_filter: bool = field(default_factory=lambda: _env_bool("USE_SLOPE_FILTER", False))
+    slope_min: float = field(default_factory=lambda: _env_float("SLOPE_MIN", 0.0))
+
+    # Pullback entry: only buy when price is NEAR the fast EMA (not extended),
+    # i.e. buy the dip in an uptrend rather than chasing a stretched bar.
+    use_pullback_entry: bool = field(default_factory=lambda: _env_bool("USE_PULLBACK_ENTRY", False))
+    pullback_max_extension: float = field(default_factory=lambda: _env_float("PULLBACK_MAX_EXTENSION", 1.0))
 
     # Risk management (ATR-based)
     atr_period: int = field(default_factory=lambda: _env_int("ATR_PERIOD", 14))

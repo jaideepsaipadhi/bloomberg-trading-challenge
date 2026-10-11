@@ -53,11 +53,19 @@ class Signal:
         return asdict(self)
 
 
-def _passes_filters(row: pd.Series, cfg) -> bool:
-    """Boolean screen on a single (already-indicator-augmented) bar."""
+def _passes_filters(row: pd.Series, cfg, regime_ok: bool = True) -> bool:
+    """Boolean screen on a single (already-indicator-augmented) bar.
+
+    ``regime_ok`` is the market-regime verdict for this bar's date (benchmark
+    above its EMA). It only matters when ``cfg.use_regime_filter`` is set.
+    """
     # Need valid indicator values.
     needed = ["ema_fast", "ema_mid", "ema_slow", "roc", "rsi", "atr",
               "vol_ratio", "atr_extension", "close", "high"]
+    if cfg.use_adx_filter:
+        needed.append("adx")
+    if cfg.use_slope_filter:
+        needed.append("ema_slow_slope")
     if any(pd.isna(row.get(c)) for c in needed):
         return False
     if row["atr"] <= 0:
@@ -79,7 +87,20 @@ def _passes_filters(row: pd.Series, cfg) -> bool:
     # 4) Anti-chasing: don't buy a move already stretched far above the fast EMA.
     not_overextended = row["atr_extension"] <= cfg.max_atr_extension
 
-    return bool(stacked and above_mid and momentum and volume_ok and not_overextended)
+    if not (stacked and above_mid and momentum and volume_ok and not_overextended):
+        return False
+
+    # --- Optional win-rate filters (only applied when enabled in config) ---
+    if cfg.use_regime_filter and not regime_ok:
+        return False
+    if cfg.use_adx_filter and row["adx"] < cfg.adx_min:
+        return False
+    if cfg.use_slope_filter and row["ema_slow_slope"] < cfg.slope_min:
+        return False
+    if cfg.use_pullback_entry and row["atr_extension"] > cfg.pullback_max_extension:
+        return False
+
+    return True
 
 
 def _score(row: pd.Series, cfg) -> float:
@@ -104,11 +125,14 @@ def _score(row: pd.Series, cfg) -> float:
     )
 
 
-def build_signal(symbol: str, df: pd.DataFrame, cfg, portfolio) -> Optional[Signal]:
+def build_signal(symbol: str, df: pd.DataFrame, cfg, portfolio,
+                 regime_ok: bool = True) -> Optional[Signal]:
     """Evaluate the MOST RECENT bar of ``df`` for a setup.
 
     Returns a Signal if the latest bar qualifies, else None.
     ``df`` columns: open, high, low, close, volume (lower-case), datetime index.
+    ``regime_ok`` is the benchmark regime verdict for the latest bar (only used
+    when cfg.use_regime_filter is set).
     """
     if df is None or len(df) < cfg.min_bars_required:
         return None
@@ -116,7 +140,7 @@ def build_signal(symbol: str, df: pd.DataFrame, cfg, portfolio) -> Optional[Sign
     data = add_indicators(df, cfg)
     row = data.iloc[-1]
 
-    if not _passes_filters(row, cfg):
+    if not _passes_filters(row, cfg, regime_ok=regime_ok):
         return None
 
     entry = float(row["close"])
@@ -160,15 +184,18 @@ def build_signal(symbol: str, df: pd.DataFrame, cfg, portfolio) -> Optional[Sign
     )
 
 
-def scan(symbol_data: dict[str, pd.DataFrame], cfg, portfolio) -> list[Signal]:
+def scan(symbol_data: dict[str, pd.DataFrame], cfg, portfolio,
+         regime_ok: bool = True) -> list[Signal]:
     """Scan a universe {symbol: ohlcv_df} and return ranked setups.
 
     Capped by both cfg.max_signals and the portfolio's available slots.
+    ``regime_ok`` is the benchmark regime verdict for the current scan date
+    (only used when cfg.use_regime_filter is set).
     """
     signals: list[Signal] = []
     for symbol, df in symbol_data.items():
         try:
-            sig = build_signal(symbol, df, cfg, portfolio)
+            sig = build_signal(symbol, df, cfg, portfolio, regime_ok=regime_ok)
         except Exception:
             # One bad symbol shouldn't sink the whole scan.
             sig = None
