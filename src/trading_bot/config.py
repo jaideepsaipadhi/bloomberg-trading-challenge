@@ -53,6 +53,9 @@ class PortfolioConfig:
     min_position_pct: float = field(default_factory=lambda: _env_float("MIN_POSITION_PCT", 0.04))
     # "score" = conviction-weight by signal score; "equal" = equal-weight.
     sizing_mode: str = field(default_factory=lambda: os.getenv("SIZING_MODE", "score"))
+    # Round-trip-ish trading cost applied per side in the portfolio backtest
+    # (commission + slippage), in basis points. 5 bps/side = 0.10% round trip.
+    cost_bps: float = field(default_factory=lambda: _env_float("COST_BPS", 5.0))
 
     @property
     def max_concurrent_positions(self) -> int:

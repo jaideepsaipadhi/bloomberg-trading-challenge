@@ -215,6 +215,7 @@ def simulate(symbol_data, cfg, pcfg, benchmark_close=None,
 
     trail = cfg.trail_atr_mult
     per_slot_target = 1.0 / max(1, pcfg.target_positions)
+    cost = getattr(pcfg, "cost_bps", 0.0) / 10_000.0  # per-side fraction
 
     for t in range(i0, i1 + 1):
         # ---- 1. manage existing positions on today's bar ----
@@ -242,7 +243,7 @@ def simulate(symbol_data, cfg, pcfg, benchmark_close=None,
                 elif (t - pos["entry_t"]) >= cfg.max_hold_days:
                     exit_price = close
             if exit_price is not None:
-                cash += pos["shares"] * exit_price
+                cash += pos["shares"] * exit_price * (1.0 - cost)
                 closed.append(exit_price / pos["entry"] - 1.0)
                 del positions[sym]
 
@@ -259,10 +260,10 @@ def simulate(symbol_data, cfg, pcfg, benchmark_close=None,
                                     if not np.isnan(data[s]["close"][t]))
             target_dollars = min(per_slot_target, pcfg.max_position_pct) * equity_now
             target_dollars = min(target_dollars, cash)
-            shares = int(math.floor(target_dollars / price))
+            shares = int(math.floor(target_dollars / (price * (1.0 + cost))))
             if shares <= 0:
                 continue
-            cash -= shares * price
+            cash -= shares * price * (1.0 + cost)
             atr0 = d["atr"][t] if not np.isnan(d["atr"][t]) else price * 0.02
             positions[sym] = {
                 "shares": shares, "entry": price, "entry_t": t,
@@ -295,7 +296,7 @@ def simulate(symbol_data, cfg, pcfg, benchmark_close=None,
     for sym, pos in positions.items():
         c = data[sym]["close"][tN]
         if not np.isnan(c):
-            cash += pos["shares"] * c
+            cash += pos["shares"] * c * (1.0 - cost)
             closed.append(c / pos["entry"] - 1.0)
     end_equity = equity_curve[-1][1] if equity_curve else start_equity
 
