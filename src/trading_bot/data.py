@@ -47,15 +47,54 @@ def fetch_one(symbol: str, period: str = "1y", interval: str = "1d") -> Optional
     return _normalise(raw)
 
 
-def fetch_universe(
-    symbols: list[str], period: str = "1y", interval: str = "1d"
-) -> dict[str, pd.DataFrame]:
-    """Fetch OHLCV for many symbols. Silently skips ones that fail."""
+def _fetch_batch(symbols: list[str], period: str, interval: str) -> dict[str, pd.DataFrame]:
+    """Download many tickers in one yfinance call (far faster than one-by-one)."""
+    import yfinance as yf
+
     out: dict[str, pd.DataFrame] = {}
+    try:
+        raw = yf.download(
+            symbols,
+            period=period,
+            interval=interval,
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+            group_by="ticker",
+        )
+    except Exception:
+        return out
+
+    if raw is None or len(raw) == 0:
+        return out
+
     for sym in symbols:
-        df = fetch_one(sym, period=period, interval=interval)
+        try:
+            sub = raw[sym] if isinstance(raw.columns, pd.MultiIndex) else raw
+        except (KeyError, TypeError):
+            continue
+        df = _normalise(sub)
         if df is not None:
             out[sym] = df
+    return out
+
+
+def fetch_universe(
+    symbols: list[str], period: str = "1y", interval: str = "1d", batch_size: int = 100
+) -> dict[str, pd.DataFrame]:
+    """Fetch OHLCV for many symbols. Batches the download for speed; falls back
+    to per-symbol fetches for any ticker a batch didn't return. Skips failures."""
+    out: dict[str, pd.DataFrame] = {}
+    for i in range(0, len(symbols), batch_size):
+        chunk = symbols[i:i + batch_size]
+        got = _fetch_batch(chunk, period, interval)
+        out.update(got)
+        # Retry individually only the ones the batch missed.
+        for sym in chunk:
+            if sym not in out:
+                df = fetch_one(sym, period=period, interval=interval)
+                if df is not None:
+                    out[sym] = df
     return out
 
 

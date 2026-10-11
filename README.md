@@ -75,11 +75,29 @@ pip install -e ".[dev]"      # or: pip install -r requirements.txt
 cp .env.example .env         # optional; defaults work for a console dry-run
 ```
 
-### 1. Load your universe (this is "WLS")
+### 1. The universe (this is "WLS")
 
-Edit `config/universe.csv` and replace the placeholder large-caps with the
-**exact tickers the competition allows you to trade**, one per line. Use Yahoo
-Finance ticker conventions (e.g. `BRK-B`, not `BRK.B`).
+The competition allows any member of the **Bloomberg World Large, Mid & Small
+Cap Index (WLS)** — single-name equities only, long-only, no ETFs, no leverage,
+and no single position above 20% of notional. That full index is **~10,000+
+global names and lives only in the Bloomberg Terminal (`MEMB`)**, so it can't be
+scraped or pulled from a public API.
+
+`config/universe.csv` therefore ships a practical, liquid, **US large/mid-cap
+subset** of WLS: the **S&P 500 + S&P MidCap 400** constituents (~900 names, all
+WLS members), tickers normalised for Yahoo Finance. Regenerate it any time with:
+
+```bash
+python scripts/build_universe.py
+```
+
+You can edit the file freely (one ticker per line, `#` for comments). To trade
+the exact index instead, export WLS constituents from the Terminal and drop them
+in — just keep Yahoo ticker conventions (`BRK-B`, not `BRK.B`).
+
+> **Note on the benchmark:** your P&L is scored against the *global* WLS index,
+> but this working universe is US-only — a deliberate regional tilt. Fine to
+> start; revisit if you want to track the global benchmark more closely.
 
 ### 2. Run a backtest (do this before trusting any signal)
 
