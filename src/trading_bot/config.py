@@ -151,6 +151,16 @@ class StrategyConfig:
     # How many setups to surface per scan (also capped by portfolio slots)
     max_signals: int = field(default_factory=lambda: _env_int("MAX_SIGNALS", 10))
 
+    # --- Cross-sectional momentum alpha (Jegadeesh-Titman style) ---
+    # Rank the whole universe by trailing return (skipping the most recent
+    # ``mom_skip`` days to dodge short-term reversal) and hold the top names,
+    # rebalancing periodically. In backtests this was the strongest, most
+    # out-of-sample-robust alpha explored. lookback/skip in trading days.
+    mom_lookback: int = field(default_factory=lambda: _env_int("MOM_LOOKBACK", 252))
+    mom_skip: int = field(default_factory=lambda: _env_int("MOM_SKIP", 21))
+    mom_rebalance_days: int = field(default_factory=lambda: _env_int("MOM_REBALANCE_DAYS", 21))
+    mom_top_k: int = field(default_factory=lambda: _env_int("MOM_TOP_K", 20))
+
     @property
     def min_bars_required(self) -> int:
         """Minimum history needed before indicators are valid."""

@@ -218,6 +218,37 @@ curve-fitting — and every full-period return here is inflated by **survivorshi
 bias** (today's index members only), so trust the walk-forward over the
 headline total.
 
+## A second, stronger alpha: cross-sectional momentum
+
+The EMA+trend engine is *time-series* (each stock judged against itself). A
+head-to-head alpha study found a **cross-sectional** signal that is markedly
+stronger for a relative-return contest: rank the *whole universe* by trailing
+return and hold the strongest names.
+
+| Alpha | Test-window beat-rate vs ACWI | Test median relative |
+|---|---|---|
+| **12-1 cross-sectional momentum** | **~75–81%** | **+4.6% to +7.6%** |
+| 6-1 momentum | ~81% | +6.3% |
+| short-term reversal | ~56% | +0.3% |
+| near-52-week-high | ~50% | ≈0 (fails) |
+| low-volatility | 38% | negative (overfits) |
+
+12-1 momentum (trailing 12-month return, skipping the last month to dodge
+short-term reversal) — the classic Jegadeesh-Titman factor — beat the global
+benchmark in ~3 of 4 held-out 6-week windows. It's implemented in
+`trading_bot.alpha`:
+
+```bash
+python scripts/alpha_backtest.py --period 6y --benchmark ACWI --top-k 20
+python -m trading_bot.cli momentum --dry-run     # today's live momentum book
+```
+
+**Caveats:** the eye-watering full-period totals are inflated by survivorship
+bias (momentum + "today's winners only" is the worst case for it) — trust the
+~75% out-of-sample hit-rate, not the headline. And momentum is **pro-cyclical**:
+it gives back hard in sharp reversals, so rebalance on schedule and size with
+that in mind.
+
 ### ⚠️ A note on "tune it to beat October" / calendar windows
 
 Tuning parameters until the backtest shows a high win rate on a **hand-picked

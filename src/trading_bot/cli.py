@@ -71,6 +71,42 @@ def cmd_signals(args) -> int:
     return 0
 
 
+def cmd_momentum(args) -> int:
+    """Live cross-sectional momentum book: today's top-K strongest names."""
+    from .alpha import momentum_picks
+    from datetime import datetime
+
+    cfg = load_config()
+    symbols = load_universe(args.universe)
+    if args.limit:
+        symbols = symbols[: args.limit]
+    print(f"Fetching data for {len(symbols)} symbols...", file=sys.stderr)
+    symbol_data = data_mod.fetch_universe(symbols, period=args.period)
+    print(f"Got data for {len(symbol_data)}/{len(symbols)} symbols.", file=sys.stderr)
+
+    picks = momentum_picks(symbol_data, cfg.strategy)
+    equity = cfg.portfolio.total_capital
+    per = equity / len(picks) if picks else 0.0
+
+    stamp = datetime.now().strftime("%Y-%m-%d")
+    lines = [f"🏆 *Momentum book* — {stamp}",
+             f"Hold the {len(picks)} strongest names (12-1 momentum), equal-weight, "
+             f"rebalance ~monthly. ${per:,.0f}/name."]
+    for i, p in enumerate(picks, 1):
+        sh = int(per // p["price"]) if p["price"] > 0 else 0
+        lines.append(f"{i}. *{p['symbol']}*  mom {p['momentum']*100:+.0f}%  "
+                     f"~{sh:,} sh @ {p['price']:,.2f}")
+    lines.append("\n_Simulated competition; not advice. Momentum is pro-cyclical — "
+                 "it gives back hard in market reversals. Rebalance on schedule._")
+    message = "\n".join(lines)
+
+    notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
+    result = notifier.send(message)
+    if args.json:
+        print(json.dumps({"picks": picks, "delivery": result}, indent=2))
+    return 0
+
+
 def cmd_backtest(args) -> int:
     cfg = load_config()
     symbols = load_universe(args.universe)
@@ -119,6 +155,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(b)
     b.add_argument("--json", action="store_true", help="Also print machine-readable JSON")
     b.set_defaults(func=cmd_backtest)
+
+    m = sub.add_parser("momentum", help="Post today's cross-sectional momentum book")
+    _add_common(m)
+    m.add_argument("--dry-run", action="store_true", help="Force console output (no WhatsApp send)")
+    m.add_argument("--json", action="store_true", help="Also print machine-readable JSON")
+    m.set_defaults(func=cmd_momentum)
 
     return parser
 
