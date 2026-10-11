@@ -103,9 +103,16 @@ def cmd_momentum(args) -> int:
 
     notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
     result = notifier.send(message)
+    # Always report delivery so scheduled runs are auditable.
+    print(f"Delivery: provider={result.get('provider')} "
+          f"sent={result.get('sent', '?')} failed={result.get('failed', '?')} "
+          f"delivered={result.get('delivered')}", file=sys.stderr)
+    for r in result.get("results", []):
+        if not r.get("ok"):
+            print(f"  FAILED -> {r.get('chat_id') or r.get('to')}: {r.get('error')}", file=sys.stderr)
     if args.json:
         print(json.dumps({"picks": picks, "delivery": result}, indent=2))
-    return 0
+    return 0 if result.get("delivered", True) else 1
 
 
 def cmd_telegram_id(args) -> int:
