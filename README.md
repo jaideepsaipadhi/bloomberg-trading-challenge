@@ -302,6 +302,12 @@ A study on 15 years of data showed:
 Optimising to a calendar window produces a number that evaporates the moment
 you trade it live — which is *during* the competition. Don't.
 
+## Going live
+
+To post signals to your team over WhatsApp (Twilio setup, opt-in flow,
+scheduling, and the group caveat), follow **[docs/WHATSAPP_SETUP.md](docs/WHATSAPP_SETUP.md)**.
+A scheduled runner is included at `.github/workflows/daily-momentum.yml`.
+
 ## WhatsApp delivery
 
 Set the provider in `.env`:

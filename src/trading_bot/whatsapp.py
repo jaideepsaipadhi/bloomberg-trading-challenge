@@ -61,11 +61,22 @@ class TwilioNotifier:
                     auth=(self.account_sid, self.auth_token),
                     timeout=30,
                 )
-                results.append({"to": to, "status": resp.status_code, "ok": resp.ok})
+                row = {"to": to, "status": resp.status_code, "ok": resp.ok}
+                if not resp.ok:
+                    # Twilio returns a JSON body with a human-readable reason.
+                    try:
+                        err = resp.json()
+                        row["error"] = err.get("message") or str(err)
+                        row["code"] = err.get("code")
+                    except Exception:
+                        row["error"] = (resp.text or "")[:300]
+                results.append(row)
             except Exception as exc:  # pragma: no cover - network path
                 results.append({"to": to, "status": None, "ok": False, "error": str(exc)})
+        sent = sum(1 for r in results if r.get("ok"))
         return {"provider": "twilio", "results": results,
-                "delivered": all(r.get("ok") for r in results)}
+                "sent": sent, "failed": len(results) - sent,
+                "delivered": sent == len(results) and len(results) > 0}
 
 
 def build_notifier(wa_cfg) -> Notifier:

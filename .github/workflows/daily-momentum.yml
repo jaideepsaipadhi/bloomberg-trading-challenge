@@ -1,0 +1,43 @@
+name: Momentum book
+
+# Posts the cross-sectional momentum book to WhatsApp on a schedule.
+# Add repo Secrets (Settings -> Secrets and variables -> Actions):
+#   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, WHATSAPP_RECIPIENTS
+# Without them the run falls back to console mode (sends nothing) — safe to merge.
+
+on:
+  schedule:
+    - cron: "0 13 * * 1"      # Mondays 13:00 UTC (~8-9am ET) — momentum rebalances monthly
+  workflow_dispatch:           # manual "Run workflow" button
+    inputs:
+      dry_run:
+        description: "Force console output (no send)"
+        type: boolean
+        default: false
+
+jobs:
+  momentum:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Post momentum book
+        env:
+          WHATSAPP_PROVIDER: ${{ secrets.TWILIO_ACCOUNT_SID != '' && 'twilio' || 'console' }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+          WHATSAPP_RECIPIENTS: ${{ secrets.WHATSAPP_RECIPIENTS }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            trading-bot momentum --dry-run
+          else
+            trading-bot momentum
+          fi
