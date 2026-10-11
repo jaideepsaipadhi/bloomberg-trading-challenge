@@ -61,6 +61,8 @@ def cmd_signals(args) -> int:
 
     notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
     result = notifier.send(message)
+    print(f"Delivery: provider={result.get('provider')} sent={result.get('sent','?')} "
+          f"failed={result.get('failed','?')} delivered={result.get('delivered')}", file=sys.stderr)
 
     if args.json:
         print(json.dumps({
@@ -68,7 +70,61 @@ def cmd_signals(args) -> int:
             "allocations": [a.__dict__ for a in allocations],
             "delivery": result,
         }, indent=2))
-    return 0
+    return 0 if result.get("delivered", True) else 1
+
+
+def cmd_recap(args) -> int:
+    """Weekly performance recap: how the momentum strategy did recently vs the
+    benchmark. Posts to the configured channel."""
+    from datetime import datetime
+    from .alpha import close_panel, momentum_backtest
+
+    cfg = load_config()
+    symbols = load_universe(args.universe)
+    if args.limit:
+        symbols = symbols[: args.limit]
+    print(f"Fetching {args.period} for {len(symbols)} symbols + {args.benchmark}...", file=sys.stderr)
+    symbol_data = data_mod.fetch_universe(symbols, period=args.period)
+    bench = data_mod.fetch_one(args.benchmark, period=args.period)
+    bench_close = bench["close"] if bench is not None else None
+
+    closes = close_panel(symbol_data)
+    n = len(closes.index)
+    need = cfg.strategy.mom_lookback + cfg.strategy.mom_skip
+    if n < need + 6:
+        print(f"ERROR: not enough history ({n} days, need > {need}). Use --period 2y+.",
+              file=sys.stderr)
+        return 2
+
+    def window(days):
+        r = momentum_backtest(closes, bench_close, cfg.strategy,
+                              start=max(need, n - 1 - days), end=n)
+        return r
+
+    wk, mo = window(5), window(21)
+    stamp = datetime.now().strftime("%Y-%m-%d")
+
+    def line(label, r):
+        return (f"{label}: strategy *{r.total_return*100:+.1f}%*  vs {args.benchmark} "
+                f"{r.benchmark_return*100:+.1f}%  → *{r.relative_return*100:+.1f} pp*")
+
+    message = "\n".join([
+        f"📈 *Momentum book — weekly recap* ({stamp})",
+        line("Past 5 trading days", wk),
+        line("Past ~1 month", mo),
+        "\n_Backtested strategy performance (not your actual fills), and "
+        "survivorship-biased — directional, not exact. Positive 'pp' = beating "
+        "the benchmark, which is what the competition scores._",
+    ])
+
+    notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
+    result = notifier.send(message)
+    print(f"Delivery: provider={result.get('provider')} sent={result.get('sent','?')} "
+          f"failed={result.get('failed','?')} delivered={result.get('delivered')}", file=sys.stderr)
+    if args.json:
+        print(json.dumps({"week": wk.summary(), "month": mo.summary(),
+                          "delivery": result}, indent=2))
+    return 0 if result.get("delivered", True) else 1
 
 
 def cmd_momentum(args) -> int:
@@ -85,6 +141,12 @@ def cmd_momentum(args) -> int:
     print(f"Got data for {len(symbol_data)}/{len(symbols)} symbols.", file=sys.stderr)
 
     picks = momentum_picks(symbol_data, cfg.strategy)
+    if not picks:
+        need = cfg.strategy.mom_lookback + cfg.strategy.mom_skip
+        print(f"ERROR: no momentum ranks — need ~{need} trading days of history "
+              f"but fetched period='{args.period}'. Use --period 2y or more. "
+              f"Not posting an empty book.", file=sys.stderr)
+        return 2
     equity = cfg.portfolio.total_capital
     wscheme = "inverse-vol" if cfg.strategy.mom_weight == "invvol" else "equal"
 
@@ -195,9 +257,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     m = sub.add_parser("momentum", help="Post today's cross-sectional momentum book")
     _add_common(m)
+    # 12-1 momentum needs >1 year of history; default to 2y (overridable).
     m.add_argument("--dry-run", action="store_true", help="Force console output (no send)")
     m.add_argument("--json", action="store_true", help="Also print machine-readable JSON")
-    m.set_defaults(func=cmd_momentum)
+    m.set_defaults(func=cmd_momentum, period="2y")
+
+    rc = sub.add_parser("recap", help="Post a weekly performance recap of the momentum book")
+    _add_common(rc)
+    rc.add_argument("--benchmark", default="ACWI", help="benchmark ticker (~WLS)")
+    rc.add_argument("--dry-run", action="store_true", help="Force console output (no send)")
+    rc.add_argument("--json", action="store_true", help="Also print machine-readable JSON")
+    rc.set_defaults(func=cmd_recap, period="2y")
 
     t = sub.add_parser("telegram-id", help="Discover Telegram chat/group ids for the bot")
     t.set_defaults(func=cmd_telegram_id)

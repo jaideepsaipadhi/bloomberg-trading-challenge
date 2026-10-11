@@ -1,0 +1,40 @@
+name: Daily trend setups
+
+# Posts the EMA + momentum trend setups each weekday pre-open.
+# Uses the same secrets as the momentum workflow (Telegram or Twilio).
+
+on:
+  schedule:
+    - cron: "0 13 * * 1-5"      # weekdays 13:00 UTC (~8-9am ET)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Force console output (no send)"
+        type: boolean
+        default: false
+
+jobs:
+  signals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Post trend setups
+        env:
+          NOTIFY_PROVIDER: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && 'telegram' || (secrets.TWILIO_ACCOUNT_SID != '' && 'twilio' || 'console') }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+          WHATSAPP_RECIPIENTS: ${{ secrets.WHATSAPP_RECIPIENTS }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            trading-bot signals --dry-run
+          else
+            trading-bot signals
+          fi
