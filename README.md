@@ -192,8 +192,9 @@ python scripts/portfolio_backtest.py --period 5y --benchmark ACWI
 ```
 
 It runs the concentrated, trend-riding portfolio day by day (no look-ahead:
-close-signals execute at the next open), with realistic trading costs
-(`COST_BPS`, 5 bps/side), then reports a full-history run and a **walk-forward
+close-signals execute at the next open). The competition fills without
+commissions, so `COST_BPS` defaults to 0 (set it >0 only for a realism
+stress-test), then reports a full-history run and a **walk-forward
 over ~6-week windows** (the competition length): how often and by how much it
 beats the benchmark, including the right-tail (p90) outcome that placing well
 depends on. Use `--benchmark ACWI` (global, ≈ WLS) — `SPY` is a much tougher
