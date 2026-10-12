@@ -1,35 +1,37 @@
-name: Momentum book
+name: Momentum post
 
-# Posts the cross-sectional momentum book to WhatsApp on a schedule.
-# Add repo Secrets (Settings -> Secrets and variables -> Actions):
-#   Telegram (recommended): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
-#   or Twilio WhatsApp: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, WHATSAPP_RECIPIENTS
-# Without them the run falls back to console mode (sends nothing) — safe to merge.
+# Smart poster: posts a fresh book ONLY on a rebalance (~monthly), else a short
+# weekly "no change" heartbeat (no data fetch). The book is remembered in
+# state/book_state.json, committed back by this workflow.
+#
+# Secrets (Settings -> Secrets and variables -> Actions):
+#   Telegram: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
+# Without them it runs in console mode (sends nothing) — safe to merge.
 
 on:
   schedule:
-    - cron: "0 13 * * 1"      # Mondays 13:00 UTC (~8-9am ET) — momentum rebalances monthly
-  workflow_dispatch:           # manual "Run workflow" button
+    - cron: "0 13 * * 1-5"      # weekdays 13:00 UTC (~8-9am ET)
+  workflow_dispatch:
     inputs:
       dry_run:
-        description: "Force console output (no send)"
+        description: "Force console output (no send, no state write)"
         type: boolean
         default: false
 
+permissions:
+  contents: write              # to commit the updated book state
+
 jobs:
-  momentum:
+  post:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
       - name: Install
         run: pip install -e .
-
-      - name: Post momentum book
+      - name: Post (rebalance or heartbeat)
         env:
           NOTIFY_PROVIDER: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && 'telegram' || (secrets.TWILIO_ACCOUNT_SID != '' && 'twilio' || 'console') }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -40,7 +42,19 @@ jobs:
           WHATSAPP_RECIPIENTS: ${{ secrets.WHATSAPP_RECIPIENTS }}
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            trading-bot momentum --dry-run
+            trading-bot post --dry-run
           else
-            trading-bot momentum
+            trading-bot post
+          fi
+      - name: Commit updated state
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          if [ -n "$(git status --porcelain state/)" ]; then
+            git config user.name "trading-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state/
+            git commit -m "Update book state [skip ci]"
+            git push
+          else
+            echo "No state change to commit."
           fi

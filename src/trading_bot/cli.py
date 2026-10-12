@@ -180,6 +180,61 @@ def cmd_momentum(args) -> int:
     return 0 if result.get("delivered", True) else 1
 
 
+def cmd_post(args) -> int:
+    """Smart poster: post a fresh book ONLY on a rebalance, else a short weekly
+    'no change' heartbeat (no data fetch). Remembers the book in a state file."""
+    from datetime import date, datetime, timedelta
+    from .alpha import momentum_picks
+    from .formatting import format_momentum_book
+    from .state import load_state, save_state, needs_rebalance
+
+    cfg = load_config()
+    state = load_state()
+    today = date.today()
+    notifier = ConsoleNotifier() if args.dry_run else build_notifier(cfg.whatsapp)
+    equity = cfg.portfolio.total_capital
+
+    if needs_rebalance(state, today, args.rebalance_days):
+        symbols = load_universe(args.universe)
+        if args.limit:
+            symbols = symbols[: args.limit]
+        print(f"Rebalance day — fetching {args.period} for {len(symbols)} symbols...", file=sys.stderr)
+        symbol_data = data_mod.fetch_universe(symbols, period=args.period)
+        picks = momentum_picks(symbol_data, cfg.strategy)
+        if not picks:
+            print("ERROR: no momentum ranks (need --period 2y+). Not posting.", file=sys.stderr)
+            return 2
+        book = []
+        for p in picks:
+            w = p.get("weight") or (1.0 / len(picks))
+            sh = int((w * equity) // p["price"]) if p["price"] > 0 else 0
+            book.append({"symbol": p["symbol"], "price": p["price"], "weight": w, "shares": sh})
+        body = format_momentum_book(picks, equity, cfg.strategy.mom_weight)
+        message = "🔄 *REBALANCE DAY — new book. Update your positions.*\n\n" + body
+        result = notifier.send(message)
+        _report_delivery(result)
+        if not args.dry_run or args.write_state:
+            save_state({"last_rebalance": today.isoformat(), "as_of": today.isoformat(), "book": book})
+            print(f"State updated: rebalanced {today.isoformat()} ({len(book)} names).", file=sys.stderr)
+        return 0 if result.get("delivered", True) else 1
+
+    # Not a rebalance — weekly heartbeat only (no fetch; echo the held book).
+    if today.weekday() != args.heartbeat_weekday:
+        print("No post today (not a rebalance; not the weekly heartbeat day).", file=sys.stderr)
+        return 0
+    book = state["book"]
+    last = state["last_rebalance"]
+    nxt = (datetime.strptime(last, "%Y-%m-%d").date() + timedelta(days=args.rebalance_days)).isoformat()
+    picks = [{"symbol": b["symbol"], "price": b["price"], "weight": b["weight"], "momentum": 0.0}
+             for b in book]
+    body = format_momentum_book(picks, equity, cfg.strategy.mom_weight)
+    message = (f"✅ *No rebalance this week — keep holding the current book.*\n"
+               f"_Set {last} · next rebalance ~{nxt}_\n\n" + body)
+    result = notifier.send(message)
+    _report_delivery(result)
+    return 0 if result.get("delivered", True) else 1
+
+
 def cmd_telegram_id(args) -> int:
     """List chat ids the bot can see (run after adding the bot to your group
     and sending a message there). Needs TELEGRAM_BOT_TOKEN in the environment."""
@@ -279,6 +334,17 @@ def build_parser() -> argparse.ArgumentParser:
     pg.add_argument("--dry-run", action="store_true", help="Force console output (no send)")
     pg.add_argument("--json", action="store_true", help="Also print machine-readable JSON")
     pg.set_defaults(func=cmd_ping)
+
+    po = sub.add_parser("post", help="Smart post: rebalance book on change, else weekly heartbeat")
+    _add_common(po)
+    po.add_argument("--rebalance-days", type=int, default=28,
+                    help="calendar days between rebalances (default 28)")
+    po.add_argument("--heartbeat-weekday", type=int, default=0,
+                    help="weekday for the 'no change' heartbeat (0=Mon)")
+    po.add_argument("--dry-run", action="store_true", help="Force console output (no send)")
+    po.add_argument("--write-state", action="store_true",
+                    help="Write state even on a dry run (for seeding)")
+    po.set_defaults(func=cmd_post, period="2y")
 
     return parser
 

@@ -1,0 +1,126 @@
+{
+  "last_rebalance": "2026-10-12",
+  "as_of": "2026-10-12",
+  "book": [
+    {
+      "symbol": "SNDK",
+      "price": 1490.44,
+      "weight": 0.034,
+      "shares": 22
+    },
+    {
+      "symbol": "LITE",
+      "price": 996.18,
+      "weight": 0.039,
+      "shares": 39
+    },
+    {
+      "symbol": "MRNA",
+      "price": 217.26,
+      "weight": 0.0102,
+      "shares": 46
+    },
+    {
+      "symbol": "MU",
+      "price": 997.65,
+      "weight": 0.0501,
+      "shares": 50
+    },
+    {
+      "symbol": "STX",
+      "price": 756.7,
+      "weight": 0.0494,
+      "shares": 65
+    },
+    {
+      "symbol": "VICR",
+      "price": 258.02,
+      "weight": 0.0391,
+      "shares": 151
+    },
+    {
+      "symbol": "WDC",
+      "price": 388.76,
+      "weight": 0.0467,
+      "shares": 120
+    },
+    {
+      "symbol": "DELL",
+      "price": 569.16,
+      "weight": 0.0477,
+      "shares": 83
+    },
+    {
+      "symbol": "BE",
+      "price": 262.05,
+      "weight": 0.0349,
+      "shares": 133
+    },
+    {
+      "symbol": "DOCN",
+      "price": 128.18,
+      "weight": 0.0436,
+      "shares": 340
+    },
+    {
+      "symbol": "VIAV",
+      "price": 42.6,
+      "weight": 0.0458,
+      "shares": 1075
+    },
+    {
+      "symbol": "FORM",
+      "price": 131.51,
+      "weight": 0.0401,
+      "shares": 304
+    },
+    {
+      "symbol": "PBF",
+      "price": 85.71,
+      "weight": 0.0561,
+      "shares": 654
+    },
+    {
+      "symbol": "INTC",
+      "price": 101.18,
+      "weight": 0.0533,
+      "shares": 526
+    },
+    {
+      "symbol": "TER",
+      "price": 388.1,
+      "weight": 0.0502,
+      "shares": 129
+    },
+    {
+      "symbol": "MRVL",
+      "price": 267.34,
+      "weight": 0.0486,
+      "shares": 181
+    },
+    {
+      "symbol": "ROIV",
+      "price": 34.82,
+      "weight": 0.0739,
+      "shares": 2122
+    },
+    {
+      "symbol": "COHR",
+      "price": 289.41,
+      "weight": 0.0366,
+      "shares": 126
+    },
+    {
+      "symbol": "VLO",
+      "price": 436.08,
+      "weight": 0.1115,
+      "shares": 255
+    },
+    {
+      "symbol": "ATI",
+      "price": 191.02,
+      "weight": 0.0892,
+      "shares": 466
+    }
+  ]
+}
